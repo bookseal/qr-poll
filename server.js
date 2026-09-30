@@ -634,6 +634,18 @@ app.get("/", (req, res) =>
   res.sendFile(path.join(__dirname, "public", "index.html"))
 );
 
+// 홈의 "Try the live demo" → 데모 이벤트(meta.demo === true)의 admin 콘솔로 이동.
+// admin key는 서버의 events/*.json에만 있고 git엔 없으니, 정적 페이지에 박아두지 않고 매번 조회한다.
+app.get("/demo", (req, res) => {
+  const demo = fs
+    .readdirSync(EVENTS_DIR)
+    .filter((f) => f.endsWith(".json"))
+    .map((f) => eventMeta(f.slice(0, -5)))
+    .find((m) => m?.demo);
+  if (!demo) return res.status(404).send("No demo event configured.");
+  res.redirect(`/admin/${encodeURIComponent(demo.code)}?key=${encodeURIComponent(demo.adminKey)}`);
+});
+
 // --- 자체 체크: node server.js --selftest ---
 function selftest() {
   const code = "__test__";
