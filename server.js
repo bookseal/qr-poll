@@ -388,7 +388,7 @@ app.get("/presenter/verify", (req, res) => {
   const page = (body) => `<!doctype html><html lang="en"><head><meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="color-scheme" content="light" />
-<title>QR Poll · Presenter</title><link rel="stylesheet" href="/style.css?v=20" /></head>
+<title>QR Poll · Presenter</title><link rel="stylesheet" href="/style.css?v=21" /></head>
 <body><div class="center"><div class="card">${body}</div></div></body></html>`;
   if (!rec || rec.used || rec.exp < Date.now()) {
     magicTokens.delete(token);
@@ -432,8 +432,8 @@ app.get("/api/:code", (req, res) => {
   const polls = normalized.polls.map((p) => ({ ...p, counts: p.type === "choice" ? pollCounts(req.params.code, p) : undefined }));
   const messages = publicMessages(req.params.code);
   const currentStage = room(req.params.code).stage;
-  // qa: 소리함 채널 메타(제목/정렬)만. 메시지는 messages에 이미 있어 중복 전송 안 함.
-  res.json({ ...pub, polls, qa: { id: QA_ID, q: "소리함", sort: normalized.qaSort }, messages, stage: currentStage });
+  // qa: Say Anything 채널 메타(제목/정렬)만. 메시지는 messages에 이미 있어 중복 전송 안 함.
+  res.json({ ...pub, polls, qa: { id: QA_ID, q: "Say Anything", sort: normalized.qaSort }, messages, stage: currentStage });
 });
 
 // SSE stream

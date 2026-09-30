@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="color-scheme" content="light" />
   <title>QR Poll · Presenter Console</title>
-  <link rel="stylesheet" href="/style.css?v=20" />
+  <link rel="stylesheet" href="/style.css?v=21" />
 </head>
 <body>
   <div class="wrap admin">
@@ -22,7 +22,7 @@
       <aside class="admin-sidebar" aria-label="Presenter navigation">
         <div class="sidebar-label">Views</div>
         <button id="pollsTab" class="admin-tab active" type="button">Polls</button>
-        <button id="chatTab" class="admin-tab" type="button" aria-label="소리함 열기">소리함 <span id="chatBadge" class="unread-label" hidden></span></button>
+        <button id="chatTab" class="admin-tab" type="button" aria-label="Open Say Anything">Say Anything <span id="chatBadge" class="unread-label" hidden></span></button>
         <div class="sidebar-label">Show on screen</div>
         <div id="sidebarItems" class="sidebar-items"></div>
       </aside>
@@ -41,7 +41,7 @@
         </section>
 
         <section id="chatPanel" class="panel" hidden>
-          <div class="panel-title">소리함 <span id="mcount" class="count"></span><button id="archiveToggle" class="mini" type="button">Show archived</button></div>
+          <div class="panel-title">Say Anything <span id="mcount" class="count"></span><button id="archiveToggle" class="mini" type="button">Show archived</button></div>
           <ul id="feed" class="adminfeed"></ul>
         </section>
 
@@ -51,7 +51,7 @@
   </div>
 
   <script type="module">
-    import { connect, renderPoll, updatePoll, sortMessages, adminAction } from "/app.js?v=20";
+    import { connect, renderPoll, updatePoll, sortMessages, adminAction } from "/app.js?v=21";
     const parts = location.pathname.split("/");
     const code = parts.pop();
     const key = new URLSearchParams(location.search).get("key") || "";
@@ -342,7 +342,7 @@
 
       const chat = [...msgs.values()].filter((m) => (m.pollId || "qa") === "qa").sort(byTime);
       const archivedCount = chat.filter((m) => m.deleted).length;
-      out.push(`## 소리함  (${chat.length} total, ${archivedCount} archived)`);
+      out.push(`## Say Anything  (${chat.length} total, ${archivedCount} archived)`);
       chat.forEach((m) => out.push(line(m)));
 
       const blob = new Blob([out.join("\n")], { type: "text/plain;charset=utf-8" });
