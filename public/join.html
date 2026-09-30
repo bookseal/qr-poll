@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="color-scheme" content="light" />
   <title>QR Poll · Audience</title>
-  <link rel="stylesheet" href="/style.css?v=17" />
+  <link rel="stylesheet" href="/style.css?v=18" />
 </head>
 <body>
   <div class="wrap">
@@ -30,7 +30,7 @@
     <form class="chat-composer" id="chatForm"><textarea id="chatText" rows="1" maxlength="500" placeholder="Say anything…" required></textarea><button id="chatSend">Send</button></form>
   </aside>
   <script type="module">
-    import { connect, send, buildLi, setCount, renderPoll, updatePoll, upgradeAuthorship } from "/app.js?v=17";
+    import { connect, send, buildLi, setCount, renderPoll, updatePoll, upgradeAuthorship } from "/app.js?v=18";
     const pathParts = location.pathname.split("/").filter(Boolean);
     const chatMode = pathParts.at(-1) === "chat";
     const code = chatMode ? pathParts.at(-2) : pathParts.at(-1);

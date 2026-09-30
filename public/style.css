@@ -73,9 +73,11 @@ header .code { color: var(--muted); font-size: 13px; }
   text-decoration: underline;
 }
 .tabs { display: flex; gap: 8px; overflow-x: auto; padding: 12px 0 4px; scrollbar-width: thin; }
-.tab { flex: 0 0 auto; padding: 8px 14px; border-radius: 999px; background: var(--card); border: 1px solid #2f3441; }
-.tab.active { background: var(--accent); border-color: var(--accent); }
-.tab:disabled { opacity: .45; cursor: not-allowed; }
+.tab { flex: 0 0 auto; padding: 8px 14px; border-radius: 999px; background: var(--card); border: 1px solid var(--line); color: var(--fg); }
+.tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+/* opacity로 흐리게 하면 글자색이 배경과 거의 구별 안 될 만큼 옅어진다(실사용 중 발견된 버그).
+   글자는 --fg 그대로 두고, 배경만 살짝 다르게 해서 "지금은 못 누른다"만 표시한다 */
+.tab:disabled { cursor: not-allowed; background: var(--bg2); border-color: var(--line); }
 .poll-hint { color: var(--muted); margin: 0; }
 /* 사이드바+본문을 flex로 나란히. 사이드바는 확대(zoom)해도 절대 사라지지 않고,
    좁아질수록 사이드바 폭·패딩만 줄어든다 (아래 미디어쿼리 참고) — 절대 위아래로 쌓지 않는다. */
