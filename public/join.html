@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="color-scheme" content="light" />
   <title>QR Poll · Audience</title>
-  <link rel="stylesheet" href="/style.css?v=19" />
+  <link rel="stylesheet" href="/style.css?v=20" />
 </head>
 <body>
   <div class="wrap">
@@ -23,14 +23,14 @@
       <button id="send">Send</button>
     </form>
   </div>
-  <a id="chatToggle" class="chat-toggle" aria-label="Open Chat Room">Chat Room</a>
-  <aside id="chatPanel" class="chat-panel" hidden aria-label="Chat Room">
-    <div class="chat-head"><div><strong>Chat Room</strong><small>Open conversation</small></div><a id="chatClose" class="chat-close" aria-label="Back to polls" href="#">×</a></div>
+  <a id="chatToggle" class="chat-toggle" aria-label="소리함 열기">소리함</a>
+  <aside id="chatPanel" class="chat-panel" hidden aria-label="소리함">
+    <div class="chat-head"><div><strong>소리함</strong><small>누구나 자유롭게</small></div><a id="chatClose" class="chat-close" aria-label="Back to polls" href="#">×</a></div>
     <ul id="chatFeed" class="chat-feed"></ul>
     <form class="chat-composer" id="chatForm"><textarea id="chatText" rows="1" maxlength="500" placeholder="Say anything…" required></textarea><button id="chatSend">Send</button></form>
   </aside>
   <script type="module">
-    import { connect, send, buildLi, setCount, renderPoll, updatePoll, upgradeAuthorship } from "/app.js?v=19";
+    import { connect, send, buildLi, setCount, renderPoll, updatePoll, upgradeAuthorship } from "/app.js?v=20";
     const pathParts = location.pathname.split("/").filter(Boolean);
     const chatMode = pathParts.at(-1) === "chat";
     const code = chatMode ? pathParts.at(-2) : pathParts.at(-1);
@@ -51,7 +51,7 @@
     let active = "qa";
     let chatOpen = chatMode;
     let unreadChat = 0;
-    const qa = { id: "qa", q: "Chat Room", type: "text", sort: "recent" };
+    const qa = { id: "qa", q: "소리함", type: "text", sort: "recent" };
     const chatPanel = document.getElementById("chatPanel");
     const chatToggle = document.getElementById("chatToggle");
     const chatFeed = document.getElementById("chatFeed");
@@ -101,7 +101,7 @@
       if (p) {
         const textMode = p.type === "text";
         feed.hidden = !textMode;
-        composer.hidden = !textMode; // qa(Chat Room)는 아래 chat-panel의 자체 composer를 쓴다
+        composer.hidden = !textMode; // qa(소리함)는 아래 chat-panel의 자체 composer를 쓴다
         pollbox.hidden = false;
         pollbox.replaceChildren(renderPoll(code, p, true));
         const list = [...msgs.values()].filter((m) => m.pollId === active);
