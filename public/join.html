@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="color-scheme" content="light" />
   <title>QR Poll · Audience</title>
-  <link rel="stylesheet" href="/style.css?v=18" />
+  <link rel="stylesheet" href="/style.css?v=19" />
 </head>
 <body>
   <div class="wrap">
@@ -30,7 +30,7 @@
     <form class="chat-composer" id="chatForm"><textarea id="chatText" rows="1" maxlength="500" placeholder="Say anything…" required></textarea><button id="chatSend">Send</button></form>
   </aside>
   <script type="module">
-    import { connect, send, buildLi, setCount, renderPoll, updatePoll, upgradeAuthorship } from "/app.js?v=18";
+    import { connect, send, buildLi, setCount, renderPoll, updatePoll, upgradeAuthorship } from "/app.js?v=19";
     const pathParts = location.pathname.split("/").filter(Boolean);
     const chatMode = pathParts.at(-1) === "chat";
     const code = chatMode ? pathParts.at(-2) : pathParts.at(-1);
@@ -68,13 +68,17 @@
 
     function tabs() {
       const items = [...polls.values()];
+      let activeBtn = null;
       document.getElementById("tabs").replaceChildren(...items.map((p) => {
         const b = document.createElement("button"); b.type = "button";
         b.className = "tab" + (active === p.id ? " active" : "");
         b.textContent = p.q; b.onclick = () => { if (p.id === stage.focus) { active = p.id; applyStage(); } };
         if (p.id !== stage.focus) b.disabled = true;
+        if (active === p.id) activeBtn = b;
         return b;
       }));
+      // 가로 한 줄짜리 탭바라 활성 poll이 오른쪽 밖으로 밀려나 있을 수 있어, 항상 보이는 위치로 스크롤한다
+      activeBtn?.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
     }
 
     function renderChat() {
