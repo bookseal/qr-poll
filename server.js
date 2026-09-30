@@ -137,6 +137,11 @@ function visibleMessages(code) {
   return room(code).messages.filter((m) => !m.deleted);
 }
 
+// 공개 API용: token(작성자 확인용 내부 값)은 절대 내보내지 않는다.
+function publicMessages(code) {
+  return visibleMessages(code).map(({ token, ...m }) => m);
+}
+
 function delMessage(code, id) {
   const m = room(code).byId.get(id);
   if (!m || m.deleted) return false;
@@ -424,7 +429,7 @@ app.get("/api/:code", (req, res) => {
   const normalized = normalizeMeta(meta);
   const { adminKey, presenterEmail, ...pub } = normalized; // private access fields are never exposed
   const polls = normalized.polls.map((p) => ({ ...p, counts: p.type === "choice" ? pollCounts(req.params.code, p) : undefined }));
-  const messages = visibleMessages(req.params.code);
+  const messages = publicMessages(req.params.code);
   const currentStage = room(req.params.code).stage;
   // qa: Chat Room 채널 메타(제목/정렬)만. 메시지는 messages에 이미 있어 중복 전송 안 함.
   res.json({ ...pub, polls, qa: { id: QA_ID, q: "Chat Room", sort: normalized.qaSort }, messages, stage: currentStage });
@@ -674,6 +679,7 @@ function selftest() {
   console.assert(reloaded.messages.length === 2, "reload from jsonl");
   console.assert(reloaded.byId.get(1).reactions === 3, "reactions persist across reload");
   console.assert(reloaded.byId.get(1).text === "hi there", "edit persists across reload");
+  console.assert(!("token" in publicMessages(code)[0]), "public API never leaks author token");
   console.assert(JSON.stringify(pollCounts(code, poll)) === "[1,0,2]", "votes persist across reload");
   // 단일 선택: 같은 기기가 바꾸면 이전 표 이동 / 복수 선택: 누적, 개별 취소
   const single = { id: "p2", options: ["a", "b", "c"] };

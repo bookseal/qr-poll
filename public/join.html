@@ -16,6 +16,12 @@
     <div id="pollbox"></div>
     <ul id="feed"></ul>
   </div>
+  <div class="composer" id="composer" hidden>
+    <form class="inner" id="form">
+      <textarea id="text" rows="1" maxlength="500" placeholder="Write anonymously…" required></textarea>
+      <button id="send">Send</button>
+    </form>
+  </div>
   <a id="chatToggle" class="chat-toggle" aria-label="Open Chat Room">Chat Room</a>
   <aside id="chatPanel" class="chat-panel" hidden aria-label="Chat Room">
     <div class="chat-head"><div><strong>Chat Room</strong><small>Open conversation</small></div><a id="chatClose" class="chat-close" aria-label="Back to polls" href="#">×</a></div>
@@ -29,6 +35,7 @@
     const code = chatMode ? pathParts.at(-2) : pathParts.at(-1);
     const feed = document.getElementById("feed");
     const pollbox = document.getElementById("pollbox");
+    const composer = document.getElementById("composer");
     document.getElementById("code").textContent = code;
     // ?blur=1 : 메시지 본문 블러(개인정보 스크린샷용)
     if (new URLSearchParams(location.search).get("blur") === "1") {
@@ -89,6 +96,7 @@
       if (p) {
         const textMode = p.type === "text";
         feed.hidden = !textMode;
+        composer.hidden = !textMode; // qa(Chat Room)는 아래 chat-panel의 자체 composer를 쓴다
         pollbox.hidden = false;
         pollbox.replaceChildren(renderPoll(code, p, true));
         const list = [...msgs.values()].filter((m) => m.pollId === active);
@@ -97,6 +105,7 @@
         pollbox.hidden = true;
         pollbox.replaceChildren();
         feed.hidden = false;
+        composer.hidden = true;
         feed.replaceChildren();
       }
       renderChat();
@@ -140,6 +149,20 @@
       },
       onStage: (s) => { stage = { focus: s.focus, sort: s.sort }; applyStage(); },
       onPolls: (items) => { polls.clear(); items.forEach((p) => polls.set(p.id, p)); applyStage(); },
+    });
+
+    const form = document.getElementById("form");
+    const text = document.getElementById("text");
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const v = text.value.trim();
+      if (!v) return;
+      text.value = "";
+      if (!(await send(code, v, active))) text.value = v; // restore on failure
+    });
+    text.addEventListener("keydown", (e) => {
+      if (e.isComposing || e.keyCode === 229) return; // IME 조합 중
+      if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); form.requestSubmit(); }
     });
 
     const chatForm = document.getElementById("chatForm");
