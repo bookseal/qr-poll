@@ -3,8 +3,9 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="light" />
   <title>QR Poll · Projector</title>
-  <link rel="stylesheet" href="/style.css?v=14" />
+  <link rel="stylesheet" href="/style.css?v=15" />
 </head>
 <body>
   <div class="present">
@@ -24,7 +25,7 @@
   </div>
 
   <script type="module">
-    import { connect, buildLi, renderPoll, updatePoll, sortMessages } from "/app.js?v=14";
+    import { connect, buildLi, renderPoll, updatePoll, sortMessages } from "/app.js?v=15";
     const code = location.pathname.split("/").pop();
     const feed = document.getElementById("feed");
     const pollbox = document.getElementById("pollbox");

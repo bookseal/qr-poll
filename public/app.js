@@ -63,16 +63,17 @@ function isMine(code, id) {
   return (localStorage.getItem(`qr-poll:mine:${code}`) || "").split(",").includes(String(id));
 }
 
+// 성공 시 저장된 메시지(id 포함)를 반환, 실패 시 null.
 export async function send(code, text, pollId = "qa") {
   const r = await fetch(`/msg/${esc(code)}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ text, pollId, token: reactionToken() }),
   });
-  if (!r.ok) return false;
+  if (!r.ok) return null;
   const msg = await r.json();
   rememberMine(code, msg.id);
-  return true;
+  return msg;
 }
 
 // 본인 글 수정 (작성 기기 토큰이 서버 기록과 일치해야 성공)
@@ -122,16 +123,28 @@ export function buildLi(code, m) {
   btn.innerHTML = `👍 <b>${m.reactions || 0}</b>`;
   btn.onclick = async () => { await react(code, m.id); btn.classList.add("reacted"); btn.disabled = true; };
   li.append(txt);
-  if (isMine(code, m.id)) {
-    const edit = document.createElement("button");
-    edit.type = "button";
-    edit.className = "edit";
-    edit.textContent = "✏️";
-    edit.onclick = () => startEdit(li, code, m, txt, edit);
-    li.append(edit);
-  }
+  if (isMine(code, m.id)) li.append(editButton(li, code, m, txt));
   li.append(btn);
   return li;
+}
+
+function editButton(li, code, m, txt) {
+  const edit = document.createElement("button");
+  edit.type = "button";
+  edit.className = "edit";
+  edit.textContent = "✏️";
+  edit.onclick = () => startEdit(li, code, m, txt, edit);
+  return edit;
+}
+
+// send()가 서버 응답(id)을 받기 전에 SSE로 내 메시지가 먼저 그려지는 경우가 있어
+// (같은 요청의 broadcast가 fetch 응답보다 먼저 도착), rememberMine 직후 이미 그려진
+// li에 편집 버튼을 뒤늦게 붙여준다. li가 아직 없거나 버튼이 이미 있으면 아무 일도 안 한다.
+export function upgradeAuthorship(container, code, m) {
+  const li = container.querySelector(`li[data-id="${m.id}"]`);
+  const txt = li?.querySelector(".txt");
+  if (!txt || li.querySelector(".edit")) return;
+  txt.after(editButton(li, code, m, txt));
 }
 
 // 텍스트를 인라인 textarea로 바꿔 본인 글을 수정. 저장/취소 시 원래 span으로 복원.

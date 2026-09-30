@@ -387,7 +387,8 @@ app.get("/presenter/verify", (req, res) => {
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const page = (body) => `<!doctype html><html lang="en"><head><meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>QR Poll · Presenter</title><link rel="stylesheet" href="/style.css?v=14" /></head>
+<meta name="color-scheme" content="light" />
+<title>QR Poll · Presenter</title><link rel="stylesheet" href="/style.css?v=15" /></head>
 <body><div class="center"><div class="card">${body}</div></div></body></html>`;
   if (!rec || rec.used || rec.exp < Date.now()) {
     magicTokens.delete(token);

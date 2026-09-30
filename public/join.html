@@ -3,8 +3,9 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="light" />
   <title>QR Poll · Audience</title>
-  <link rel="stylesheet" href="/style.css?v=14" />
+  <link rel="stylesheet" href="/style.css?v=15" />
 </head>
 <body>
   <div class="wrap">
@@ -29,7 +30,7 @@
     <form class="chat-composer" id="chatForm"><textarea id="chatText" rows="1" maxlength="500" placeholder="Say anything…" required></textarea><button id="chatSend">Send</button></form>
   </aside>
   <script type="module">
-    import { connect, send, buildLi, setCount, renderPoll, updatePoll } from "/app.js?v=14";
+    import { connect, send, buildLi, setCount, renderPoll, updatePoll, upgradeAuthorship } from "/app.js?v=15";
     const pathParts = location.pathname.split("/").filter(Boolean);
     const chatMode = pathParts.at(-1) === "chat";
     const code = chatMode ? pathParts.at(-2) : pathParts.at(-1);
@@ -158,7 +159,9 @@
       const v = text.value.trim();
       if (!v) return;
       text.value = "";
-      if (!(await send(code, v, active))) text.value = v; // restore on failure
+      const msg = await send(code, v, active);
+      if (!msg) text.value = v; // restore on failure
+      else upgradeAuthorship(feed, code, msg); // SSE echo가 fetch보다 먼저 왔을 수 있어 편집 버튼 뒤늦게 부착
     });
     text.addEventListener("keydown", (e) => {
       if (e.isComposing || e.keyCode === 229) return; // IME 조합 중
@@ -169,7 +172,10 @@
     const chatText = document.getElementById("chatText");
     chatForm.addEventListener("submit", async (e) => {
       e.preventDefault(); const v = chatText.value.trim(); if (!v) return;
-      chatText.value = ""; if (!(await send(code, v, "qa"))) chatText.value = v;
+      chatText.value = "";
+      const msg = await send(code, v, "qa");
+      if (!msg) chatText.value = v;
+      else upgradeAuthorship(chatFeed, code, msg);
     });
     chatText.addEventListener("keydown", (e) => {
       if (e.isComposing || e.keyCode === 229) return;

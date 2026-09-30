@@ -3,8 +3,9 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="light" />
   <title>QR Poll · Presenter Console</title>
-  <link rel="stylesheet" href="/style.css?v=14" />
+  <link rel="stylesheet" href="/style.css?v=15" />
 </head>
 <body>
   <div class="wrap admin">
@@ -50,7 +51,7 @@
   </div>
 
   <script type="module">
-    import { connect, renderPoll, updatePoll, sortMessages, adminAction } from "/app.js?v=14";
+    import { connect, renderPoll, updatePoll, sortMessages, adminAction } from "/app.js?v=15";
     const parts = location.pathname.split("/");
     const code = parts.pop();
     const key = new URLSearchParams(location.search).get("key") || "";
@@ -223,7 +224,13 @@
         const box = document.createElement("div");
         box.className = "pollwrap";
         if (editingPoll === id) { box.append(pollEditor(p)); return box; }
-        box.append(renderPoll(code, p, false));
+        const responses = [...msgs.values()].filter((m) => m.pollId === id && !m.deleted);
+        box.append(renderPoll(code, { ...p, responseCount: responses.length }, false));
+        if (p.type === "text") {
+          const ul = document.createElement("ul"); ul.className = "adminfeed";
+          ul.replaceChildren(...sortMessages(responses, p.sort).map(msgRow));
+          box.append(ul);
+        }
         const controls = document.createElement("div"); controls.className = "poll-controls";
         for (const [direction, text] of [["up", "▲"], ["down", "▼"]]) {
           const move = document.createElement("button"); move.type = "button"; move.className = "mini"; move.textContent = text;
@@ -262,15 +269,15 @@
         renderStageBar(); renderPolls(); renderMessages();
       },
       onMsg: (m) => {
-        msgs.set(m.id, { reactions: 0, pinned: false, ...m }); renderMessages();
+        msgs.set(m.id, { reactions: 0, pinned: false, ...m }); renderMessages(); renderPolls();
         const lastRead = Number(localStorage.getItem(adminChatReadKey) || 0);
         if ((m.pollId || "qa") === "qa" && !chatView && m.ts > lastRead) { unreadChat++; chatBadge.textContent = unreadChat; chatBadge.hidden = false; }
       },
-      onReact: ({ id, reactions }) => { const m = msgs.get(id); if (m) { m.reactions = reactions; renderMessages(); } },
-      onDel: ({ id }) => { const m = msgs.get(id); if (m) m.deleted = true; renderMessages(); },
-      onRestore: ({ id }) => { const m = msgs.get(id); if (m) m.deleted = false; renderMessages(); },
-      onPin: ({ id, on }) => { const m = msgs.get(id); if (m) { m.pinned = on; renderMessages(); } },
-      onEdit: ({ id, text }) => { const m = msgs.get(id); if (m) { m.text = text; renderMessages(); } },
+      onReact: ({ id, reactions }) => { const m = msgs.get(id); if (m) { m.reactions = reactions; renderMessages(); renderPolls(); } },
+      onDel: ({ id }) => { const m = msgs.get(id); if (m) m.deleted = true; renderMessages(); renderPolls(); },
+      onRestore: ({ id }) => { const m = msgs.get(id); if (m) m.deleted = false; renderMessages(); renderPolls(); },
+      onPin: ({ id, on }) => { const m = msgs.get(id); if (m) { m.pinned = on; renderMessages(); renderPolls(); } },
+      onEdit: ({ id, text }) => { const m = msgs.get(id); if (m) { m.text = text; renderMessages(); renderPolls(); } },
       onVote: ({ poll, counts }) => {
         const p = polls.get(poll); if (p) p.counts = counts;
         const w = pollsEl.querySelector(`.poll[data-poll="${poll}"]`);
@@ -293,6 +300,7 @@
       adminMeta = data.meta || null;
       data.messages.forEach((m) => msgs.set(m.id, m));
       renderMessages();
+      renderPolls();
     }
     loadAdminMessages();
 
