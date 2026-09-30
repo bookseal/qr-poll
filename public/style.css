@@ -49,6 +49,20 @@ header .code { color: var(--muted); font-size: 13px; }
 }
 .react:hover { border-color: var(--accent); color: var(--accent); }
 .react b { color: var(--accent); }
+.edit {
+  flex: none;
+  background: var(--bg2);
+  border: 1px solid var(--line);
+  color: var(--fg);
+  padding: 6px 8px;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+.edit:hover { border-color: var(--accent); }
+.editform { flex: 1; display: flex; gap: 6px; align-items: flex-start; }
+.editform textarea { flex: 1; font: inherit; resize: vertical; }
+.editform button { flex: none; }
 .sortbtn {
   background: none;
   border: none;
@@ -113,6 +127,8 @@ header .code { color: var(--muted); font-size: 13px; }
 .pollform { display: grid; grid-template-columns: 1fr 2fr auto; gap: 8px; margin-bottom: 12px; }
 .pollform select, .pollform input { min-width: 0; }
 .pollform input:last-of-type { grid-column: 1 / -1; }
+.pollmulti { display: flex; align-items: center; gap: 6px; grid-column: 1 / -1; font-size: 14px; color: var(--muted); }
+.pollmulti input { width: auto; margin: 0; }
 @keyframes pop { from { transform: translateY(6px); opacity: 0; } }
 .composer {
   position: fixed;

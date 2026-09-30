@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>QR Poll · Projector</title>
-  <link rel="stylesheet" href="/style.css?v=12" />
+  <link rel="stylesheet" href="/style.css?v=14" />
 </head>
 <body>
   <div class="present">
@@ -24,7 +24,7 @@
   </div>
 
   <script type="module">
-    import { connect, buildLi, renderPoll, updatePoll, sortMessages } from "/app.js?v=12";
+    import { connect, buildLi, renderPoll, updatePoll, sortMessages } from "/app.js?v=14";
     const code = location.pathname.split("/").pop();
     const feed = document.getElementById("feed");
     const pollbox = document.getElementById("pollbox");
@@ -73,6 +73,7 @@
       onReact: ({ id, reactions }) => { const m = msgs.get(id); if (m) { m.reactions = reactions; render(); } },
       onDel: ({ id }) => { msgs.delete(id); render(); },
       onPin: ({ id, on }) => { const m = msgs.get(id); if (m) { m.pinned = on; render(); } },
+      onEdit: ({ id, text }) => { const m = msgs.get(id); if (m) { m.text = text; render(); } },
       onVote: ({ poll, counts }) => {
         const p = polls.get(poll); if (p) p.counts = counts;
         if (stage.focus === poll) {

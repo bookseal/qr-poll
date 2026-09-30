@@ -3,7 +3,7 @@ export const esc = encodeURIComponent;
 
 // code의 메타+기존 메시지 로드, 이후 SSE로 신규/리액션 수신.
 // onMsg(m): 메시지(초기 로드분 + 신규), onReact({id,reactions}): 리액션 갱신
-export async function connect(code, { onMeta, onMsg, onReact, onVote, onDel, onRestore, onPin, onStage, onPolls } = {}) {
+export async function connect(code, { onMeta, onMsg, onReact, onVote, onDel, onRestore, onPin, onEdit, onStage, onPolls } = {}) {
   const r = await fetch(`/api/${esc(code)}`);
   if (!r.ok) {
     document.body.innerHTML = `<div class="center"><div class="card"><h1>Event not found</h1><p>We could not find event code <b>${code}</b>.</p><a href="/">← Back home</a></div></div>`;
@@ -24,6 +24,7 @@ export async function connect(code, { onMeta, onMsg, onReact, onVote, onDel, onR
     else if (o.kind === "del") onDel?.(o);
     else if (o.kind === "restore") onRestore?.(o);
     else if (o.kind === "pin") onPin?.(o);
+    else if (o.kind === "edit") onEdit?.(o);
     else if (o.kind === "stage") onStage?.(o);
     else if (o.kind === "polls") onPolls?.(o.polls);
     else onMsg?.(o);
@@ -50,11 +51,36 @@ export async function adminAction(code, key, pathPart, body = {}) {
   return r.ok ? r.json() : null;
 }
 
+// 보낸 메시지 id를 이 기기가 작성했다고 기억 (내 글에만 편집 버튼을 보여주기 위함)
+function rememberMine(code, id) {
+  const key = `qr-poll:mine:${code}`;
+  const mine = new Set((localStorage.getItem(key) || "").split(",").filter(Boolean));
+  mine.add(String(id));
+  localStorage.setItem(key, [...mine].join(","));
+}
+
+function isMine(code, id) {
+  return (localStorage.getItem(`qr-poll:mine:${code}`) || "").split(",").includes(String(id));
+}
+
 export async function send(code, text, pollId = "qa") {
   const r = await fetch(`/msg/${esc(code)}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text, pollId }),
+    body: JSON.stringify({ text, pollId, token: reactionToken() }),
+  });
+  if (!r.ok) return false;
+  const msg = await r.json();
+  rememberMine(code, msg.id);
+  return true;
+}
+
+// 본인 글 수정 (작성 기기 토큰이 서버 기록과 일치해야 성공)
+export async function editMessage(code, id, text) {
+  const r = await fetch(`/msg/${esc(code)}/${id}/edit`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text, token: reactionToken() }),
   });
   return r.ok;
 }
@@ -80,7 +106,7 @@ export async function react(code, id) {
   if (r.ok) localStorage.setItem(key, "1");
 }
 
-// 메시지 li 생성 (텍스트 + 👍 버튼). textContent = XSS 안전.
+// 메시지 li 생성 (텍스트 + ✏️ 편집(본인 글만) + 👍 버튼). textContent = XSS 안전.
 export function buildLi(code, m) {
   const li = document.createElement("li");
   li.dataset.id = m.id;
@@ -95,8 +121,47 @@ export function buildLi(code, m) {
   if (alreadyReacted) { btn.classList.add("reacted"); btn.disabled = true; }
   btn.innerHTML = `👍 <b>${m.reactions || 0}</b>`;
   btn.onclick = async () => { await react(code, m.id); btn.classList.add("reacted"); btn.disabled = true; };
-  li.append(txt, btn);
+  li.append(txt);
+  if (isMine(code, m.id)) {
+    const edit = document.createElement("button");
+    edit.type = "button";
+    edit.className = "edit";
+    edit.textContent = "✏️";
+    edit.onclick = () => startEdit(li, code, m, txt, edit);
+    li.append(edit);
+  }
+  li.append(btn);
   return li;
+}
+
+// 텍스트를 인라인 textarea로 바꿔 본인 글을 수정. 저장/취소 시 원래 span으로 복원.
+function startEdit(li, code, m, txt, editBtn) {
+  const form = document.createElement("form");
+  form.className = "editform";
+  const area = document.createElement("textarea");
+  area.value = m.text;
+  area.maxLength = 500;
+  area.required = true;
+  const save = document.createElement("button"); save.type = "submit"; save.textContent = "Save";
+  const cancel = document.createElement("button"); cancel.type = "button"; cancel.textContent = "Cancel";
+  form.append(area, save, cancel);
+  txt.replaceWith(form);
+  editBtn.hidden = true;
+  cancel.onclick = () => { form.replaceWith(txt); editBtn.hidden = false; };
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    const text = area.value.trim();
+    if (!text) return;
+    save.disabled = true;
+    const ok = await editMessage(code, m.id, text);
+    save.disabled = false;
+    if (!ok) return;
+    m.text = text;
+    txt.textContent = text;
+    form.replaceWith(txt);
+    editBtn.hidden = false;
+  };
+  area.focus();
 }
 
 // data-id 로 특정 메시지의 리액션 카운트만 갱신
@@ -136,8 +201,19 @@ export function renderPoll(code, poll, interactive) {
     return wrap;
   }
 
+  if (poll.multi) {
+    const hint = document.createElement("p");
+    hint.className = "poll-hint";
+    hint.textContent = "Select all that apply.";
+    wrap.append(hint);
+  }
+  // 이 기기가 고른 옵션들 ("0,2" 형태로 저장; 옛 단일 값 "2"도 그대로 읽힘)
   const votedKey = `voted:${code}:${poll.id}`;
-  const votedOpt = localStorage.getItem(votedKey);
+  const mine = new Set((localStorage.getItem(votedKey) || "").split(",").filter(Boolean));
+  const paint = () => wrap.querySelectorAll(".opt").forEach((o) => {
+    o.classList.toggle("mine", mine.has(o.dataset.i));
+    o.classList.toggle("voted", !poll.multi && mine.size > 0);
+  });
 
   poll.options.forEach((label, i) => {
     const row = document.createElement("div");
@@ -149,25 +225,19 @@ export function renderPoll(code, poll, interactive) {
     row.append(bar, lab, cnt);
     if (interactive) {
       row.classList.add("clickable");
-      if (votedOpt !== null) row.classList.add("voted");
-      if (String(i) === votedOpt) row.classList.add("mine");
       row.onclick = () => {
-        const current = localStorage.getItem(votedKey);
-        if (current === String(i)) {
-          localStorage.removeItem(votedKey);
-          wrap.querySelectorAll(".opt").forEach((o) => { o.classList.remove("voted", "mine"); });
-          vote(code, poll.id, i, true);
-          return;
-        }
-        localStorage.setItem(votedKey, i);
-        wrap.querySelectorAll(".opt").forEach((o) => o.classList.add("voted"));
-        wrap.querySelectorAll(".opt").forEach((o) => o.classList.remove("mine"));
-        row.classList.add("mine");
-        vote(code, poll.id, i);
+        const undo = mine.has(row.dataset.i);
+        if (undo) mine.delete(row.dataset.i);
+        else { if (!poll.multi) mine.clear(); mine.add(row.dataset.i); }
+        if (mine.size) localStorage.setItem(votedKey, [...mine].join(","));
+        else localStorage.removeItem(votedKey);
+        paint();
+        vote(code, poll.id, i, undo);
       };
     }
     wrap.append(row);
   });
+  if (interactive) paint();
   updatePoll(wrap, poll.counts || []);
   return wrap;
 }

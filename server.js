@@ -40,6 +40,7 @@ function normalizePoll(p, i) {
     type,
     q: String(p.q || "").trim().slice(0, MAX_POLL_TITLE),
     ...(type === "choice" ? { options: (p.options || []).map(String).slice(0, MAX_OPTIONS) } : { options: [] }),
+    multi: type === "choice" && p.multi === true,
     sort: p.sort === "top" ? "top" : "recent",
     order: Number.isInteger(p.order) ? p.order : i,
   };
@@ -96,17 +97,15 @@ function room(code) {
       } else if (o.t === "v") {
         // 투표 라인: poll별 옵션 카운트
         if (o.token) {
-          const voters = (r.voters[o.poll] ||= {});
-          if (voters[o.token] !== undefined) continue;
-          voters[o.token] = Number(o.opt);
+          const mine = ((r.voters[o.poll] ||= {})[o.token] ||= new Set());
+          if (mine.has(o.opt)) continue;
+          mine.add(o.opt);
         }
         (r.votes[o.poll] ||= {})[o.opt] = (r.votes[o.poll]?.[o.opt] || 0) + 1;
       } else if (o.t === "uv") {
-        const voters = r.voters[o.poll] || {};
-        const opt = voters[o.token];
-        if (opt === undefined) continue;
-        delete voters[o.token];
-        if (r.votes[o.poll]?.[opt] > 0) r.votes[o.poll][opt]--;
+        // opt 없는 옛 uv 라인 = 그 기기의 표 전부 취소 (단일 선택 시절엔 최대 1개)
+        const mine = r.voters[o.poll]?.[o.token] || new Set();
+        for (const opt of o.opt !== undefined ? [o.opt] : [...mine]) dropVote(r, o.poll, o.token, opt);
       } else if (o.t === "d") {
         const m = r.byId.get(o.id);
         if (m) m.deleted = true;
@@ -116,6 +115,9 @@ function room(code) {
       } else if (o.t === "p") {
         const m = r.byId.get(o.id);
         if (m) m.pinned = o.on;
+      } else if (o.t === "e") {
+        const m = r.byId.get(o.id);
+        if (m) m.text = o.text;
       } else {
         o.pollId = o.pollId || QA_ID;
         o.reactions = o.reactions || 0;
@@ -190,18 +192,24 @@ function pollsPayload(code, meta) {
   }));
 }
 
+// voters[poll][token] = 그 기기가 고른 옵션 Set. 단일 선택이면 최대 1개.
+function dropVote(r, pollId, token, opt) {
+  if (!r.voters[pollId]?.[token]?.delete(opt)) return false;
+  if (r.votes[pollId]?.[opt] > 0) r.votes[pollId][opt]--;
+  return true;
+}
+
 function addVote(code, poll, opt, token = "") {
-  if (opt < 0 || opt >= poll.options.length) return null;
+  if (!Number.isInteger(opt) || opt < 0 || opt >= poll.options.length) return null;
   const r = room(code);
   if (token) {
-    const voters = (r.voters[poll.id] ||= {});
-    if (voters[token] !== undefined) {
-      const previous = voters[token];
-      if (previous === opt) return pollCounts(code, poll);
-      if (r.votes[poll.id]?.[previous] > 0) r.votes[poll.id][previous]--;
-      append(code, { t: "uv", poll: poll.id, token });
+    const mine = ((r.voters[poll.id] ||= {})[token] ||= new Set());
+    if (mine.has(opt)) return pollCounts(code, poll);
+    if (!poll.multi) for (const prev of mine) {
+      dropVote(r, poll.id, token, prev);
+      append(code, { t: "uv", poll: poll.id, token, opt: prev });
     }
-    voters[token] = opt;
+    mine.add(opt);
   }
   (r.votes[poll.id] ||= {})[opt] = (r.votes[poll.id]?.[opt] || 0) + 1;
   append(code, { t: "v", poll: poll.id, opt, ...(token ? { token } : {}) });
@@ -210,15 +218,11 @@ function addVote(code, poll, opt, token = "") {
   return counts;
 }
 
-function removeVote(code, poll, token) {
+function removeVote(code, poll, token, opt) {
   if (!token) return null;
   const r = room(code);
-  const voters = r.voters[poll.id] || {};
-  const opt = voters[token];
-  if (opt === undefined) return pollCounts(code, poll);
-  delete voters[token];
-  if (r.votes[poll.id]?.[opt] > 0) r.votes[poll.id][opt]--;
-  append(code, { t: "uv", poll: poll.id, token });
+  if (!dropVote(r, poll.id, token, opt)) return pollCounts(code, poll);
+  append(code, { t: "uv", poll: poll.id, token, opt });
   const counts = pollCounts(code, poll);
   broadcast(code, { kind: "vote", poll: poll.id, counts });
   return counts;
@@ -233,14 +237,24 @@ function broadcast(code, obj) {
   for (const res of room(code).clients) res.write(payload);
 }
 
-function addMessage(code, text, pollId = QA_ID) {
+function addMessage(code, text, pollId = QA_ID, token = "") {
   const r = room(code);
-  const msg = { id: r.messages.length + 1, pollId, text, ts: Date.now(), reactions: 0, deleted: false, pinned: false };
+  const msg = { id: r.messages.length + 1, pollId, text, ts: Date.now(), reactions: 0, deleted: false, pinned: false, token };
   r.messages.push(msg);
   r.byId.set(msg.id, msg);
-  append(code, { id: msg.id, pollId: msg.pollId, text: msg.text, ts: msg.ts });
-  broadcast(code, { kind: "msg", ...msg });
+  append(code, { id: msg.id, pollId: msg.pollId, text: msg.text, ts: msg.ts, token });
+  broadcast(code, { kind: "msg", ...msg, token: undefined });
   return msg;
+}
+
+// 작성자 본인(같은 기기 토큰)만 본문 수정. 반환값 없으면 권한 없음/메시지 없음.
+function editMessage(code, id, text, token) {
+  const m = room(code).byId.get(id);
+  if (!m || m.deleted || !token || m.token !== token) return null;
+  m.text = text;
+  append(code, { t: "e", id, text });
+  broadcast(code, { kind: "edit", id, text });
+  return m;
 }
 
 function addReaction(code, id, token = "") {
@@ -368,7 +382,7 @@ app.get("/presenter/verify", (req, res) => {
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const page = (body) => `<!doctype html><html lang="en"><head><meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>QR Poll · Presenter</title><link rel="stylesheet" href="/style.css?v=12" /></head>
+<title>QR Poll · Presenter</title><link rel="stylesheet" href="/style.css?v=14" /></head>
 <body><div class="center"><div class="card">${body}</div></div></body></html>`;
   if (!rec || rec.used || rec.exp < Date.now()) {
     magicTokens.delete(token);
@@ -453,7 +467,23 @@ app.post("/msg/:code", (req, res) => {
     if (!poll || poll.type !== "text") return res.status(400).json({ error: "bad text poll" });
   }
   lastPost.set(ip, now);
-  res.json(addMessage(req.params.code, text, pollId));
+  const token = String(req.body?.token || "").slice(0, 128);
+  const msg = addMessage(req.params.code, text, pollId, token);
+  res.json({ ...msg, token: undefined });
+});
+
+// 본인 글 수정 (작성 기기 토큰 일치 시에만)
+app.post("/msg/:code/:id/edit", (req, res) => {
+  if (!eventMeta(req.params.code))
+    return res.status(404).json({ error: "unknown event code" });
+  const text = (req.body?.text ?? "").toString().trim();
+  if (!text) return res.status(400).json({ error: "empty" });
+  if (text.length > MAX_LEN)
+    return res.status(400).json({ error: `too long (max ${MAX_LEN})` });
+  const token = String(req.body?.token || "").slice(0, 128);
+  const m = editMessage(req.params.code, Number(req.params.id), text, token);
+  if (!m) return res.status(403).json({ error: "not the author" });
+  res.json({ id: m.id, text: m.text });
 });
 
 // 익명 리액션 (👍) — 계정 없으니 탭 카운터, Slido "반응"과 동일
@@ -473,9 +503,10 @@ app.post("/vote/:code/:poll/:opt", (req, res) => {
   const poll = (meta.polls || []).find((p) => p.id === req.params.poll);
   if (!poll) return res.status(404).json({ error: "no such poll" });
   const token = String(req.body?.token || "").slice(0, 128);
+  const opt = Number(req.params.opt);
   const counts = req.body?.undo
-    ? removeVote(req.params.code, poll, token)
-    : addVote(req.params.code, poll, Number(req.params.opt), token);
+    ? removeVote(req.params.code, poll, token, opt)
+    : addVote(req.params.code, poll, opt, token);
   if (counts === null) return res.status(400).json({ error: "bad option" });
   res.json({ poll: poll.id, counts });
 });
@@ -533,7 +564,7 @@ function validPollInput(body, existingId = null) {
     ? (Array.isArray(body.options) ? body.options : []).map((x) => String(x).trim().slice(0, MAX_OPTION_LEN)).filter(Boolean).slice(0, MAX_OPTIONS)
     : [];
   if (type === "choice" && options.length < 2) return null;
-  return { id, type, q, options, sort: body.sort === "top" ? "top" : "recent" };
+  return { id, type, q, options, multi: type === "choice" && body.multi === true, sort: body.sort === "top" ? "top" : "recent" };
 }
 
 function adminMeta(req, res) {
@@ -567,6 +598,7 @@ app.post("/admin/:code/poll/:id/update", (req, res) => {
 
 app.post("/admin/:code/poll/:id/delete", (req, res) => {
   const meta = adminMeta(req, res); if (!meta) return;
+  if (meta.demo) return res.status(403).json({ error: "demo event: poll deletion is disabled" });
   const i = meta.polls.findIndex((p) => p.id === req.params.id);
   if (i < 0) return res.status(404).json({ error: "no such poll" });
   meta.polls.splice(i, 1);
@@ -607,9 +639,12 @@ function selftest() {
   const code = "__test__";
   fs.writeFileSync(path.join(EVENTS_DIR, `${code}.json`), JSON.stringify({ code, title: "t" }));
   fs.rmSync(path.join(DATA_DIR, `${code}.jsonl`), { force: true });
-  const a = addMessage(code, "hello");
+  const a = addMessage(code, "hello", QA_ID, "author-1");
   console.assert(a.id === 1 && a.text === "hello", "first message");
   addMessage(code, "world");
+  console.assert(editMessage(code, 1, "hi there", "author-1")?.text === "hi there", "author can edit own message");
+  console.assert(editMessage(code, 1, "nope", "other-device") === null, "other device cannot edit");
+  console.assert(room(code).byId.get(1).text === "hi there", "edit from wrong token rejected");
   addReaction(code, 1);
   addReaction(code, 1);
   console.assert(room(code).byId.get(1).reactions === 2, "reactions counted");
@@ -626,7 +661,21 @@ function selftest() {
   const reloaded = room(code);
   console.assert(reloaded.messages.length === 2, "reload from jsonl");
   console.assert(reloaded.byId.get(1).reactions === 3, "reactions persist across reload");
+  console.assert(reloaded.byId.get(1).text === "hi there", "edit persists across reload");
   console.assert(JSON.stringify(pollCounts(code, poll)) === "[1,0,2]", "votes persist across reload");
+  // 단일 선택: 같은 기기가 바꾸면 이전 표 이동 / 복수 선택: 누적, 개별 취소
+  const single = { id: "p2", options: ["a", "b", "c"] };
+  addVote(code, single, 0, "dev");
+  console.assert(JSON.stringify(addVote(code, single, 1, "dev")) === "[0,1,0]", "single: vote moves");
+  const multi = { id: "p3", options: ["a", "b", "c"], multi: true };
+  addVote(code, multi, 0, "dev");
+  addVote(code, multi, 2, "dev");
+  console.assert(JSON.stringify(addVote(code, multi, 2, "dev")) === "[1,0,1]", "multi: accumulates, dup ignored");
+  console.assert(JSON.stringify(removeVote(code, multi, "dev", 0)) === "[0,0,1]", "multi: undo one option");
+  fs.appendFileSync(path.join(DATA_DIR, `${code}.jsonl`), JSON.stringify({ t: "uv", poll: "p2", token: "dev" }) + "\n"); // 옛 형식 uv
+  rooms.delete(code);
+  console.assert(JSON.stringify(pollCounts(code, single)) === "[0,0,0]", "legacy uv clears single vote");
+  console.assert(JSON.stringify(pollCounts(code, multi)) === "[0,0,1]", "multi votes persist across reload");
   // 삭제/고정/stage
   addMessage(code, "삭제될 메시지");
   console.assert(visibleMessages(code).length === 3, "3 visible before delete");

@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>QR Poll · Presenter Console</title>
-  <link rel="stylesheet" href="/style.css?v=12" />
+  <link rel="stylesheet" href="/style.css?v=14" />
 </head>
 <body>
   <div class="wrap admin">
@@ -34,6 +34,7 @@
             <select id="polltype"><option value="choice">Multiple choice</option><option value="text">Open text</option></select>
             <input id="polloptions" placeholder="Options, separated by commas" />
             <button type="submit">Add poll</button>
+            <label class="pollmulti"><input id="pollmulti" type="checkbox" /> Allow multiple answers</label>
           </form>
           <div id="polls"></div>
         </section>
@@ -49,7 +50,7 @@
   </div>
 
   <script type="module">
-    import { connect, renderPoll, updatePoll, sortMessages, adminAction } from "/app.js?v=12";
+    import { connect, renderPoll, updatePoll, sortMessages, adminAction } from "/app.js?v=14";
     const parts = location.pathname.split("/");
     const code = parts.pop();
     const key = new URLSearchParams(location.search).get("key") || "";
@@ -75,6 +76,7 @@
     let chatView = false;
     let unreadChat = 0;
     let showArchived = false;
+    let isDemo = false; // 데모 이벤트: poll 삭제 버튼 숨김 (서버도 별도로 거부함)
 
     function setView(chat) {
       chatView = chat;
@@ -181,6 +183,13 @@
         opts.placeholder = "Options, separated by commas";
         form.append(opts);
       }
+      let multi = null;
+      if (p.type === "choice") {
+        const lab = document.createElement("label"); lab.className = "pollmulti";
+        multi = document.createElement("input"); multi.type = "checkbox"; multi.checked = !!p.multi;
+        lab.append(multi, " Allow multiple answers");
+        form.append(lab);
+      }
       const row = document.createElement("div"); row.className = "pe-row";
       const save = document.createElement("button"); save.type = "submit"; save.className = "mini primary"; save.textContent = "Save";
       const cancel = document.createElement("button"); cancel.type = "button"; cancel.className = "mini"; cancel.textContent = "Cancel";
@@ -192,6 +201,7 @@
         const body = {
           id: p.id, type: p.type, q: q.value.trim(),
           options: opts ? opts.value.split(",").map((x) => x.trim()).filter(Boolean) : [],
+          multi: !!multi?.checked,
         };
         if (!body.q) { err.textContent = "질문을 입력하세요."; return; }
         if (p.type === "choice" && body.options.length < 2) { err.textContent = "옵션은 2개 이상."; return; }
@@ -200,7 +210,7 @@
         save.disabled = false;
         if (!r) { err.textContent = "저장 실패 — 관리자 키를 확인하세요."; return; }
         editingPoll = null;
-        polls.set(p.id, { ...polls.get(p.id), q: body.q, options: body.options });
+        polls.set(p.id, { ...polls.get(p.id), q: body.q, options: body.options, multi: body.multi });
         renderPolls();
       };
       setTimeout(() => q.focus(), 0);
@@ -223,9 +233,13 @@
         }
         const edit = document.createElement("button"); edit.type = "button"; edit.className = "mini"; edit.textContent = "Edit";
         edit.onclick = () => { editingPoll = id; renderPolls(); };
-        const del = document.createElement("button"); del.type = "button"; del.className = "mini danger"; del.textContent = "Delete";
-        del.onclick = async () => { if (confirm("Delete this poll?")) await adminAction(code, key, `poll/${id}/delete`); };
-        controls.append(edit, del); box.append(controls);
+        controls.append(edit);
+        if (!isDemo) {
+          const del = document.createElement("button"); del.type = "button"; del.className = "mini danger"; del.textContent = "Delete";
+          del.onclick = async () => { if (confirm("Delete this poll?")) await adminAction(code, key, `poll/${id}/delete`); };
+          controls.append(del);
+        }
+        box.append(controls);
         return box;
       }));
     }
@@ -234,7 +248,8 @@
       e.preventDefault();
       const type = document.getElementById("polltype").value;
       const options = document.getElementById("polloptions").value.split(",").map((x) => x.trim()).filter(Boolean);
-      await adminAction(code, key, "poll/create", { type, q: document.getElementById("pollq").value.trim(), options });
+      const multi = type === "choice" && document.getElementById("pollmulti").checked;
+      await adminAction(code, key, "poll/create", { type, q: document.getElementById("pollq").value.trim(), options, multi });
       e.target.reset();
     };
 
@@ -243,6 +258,7 @@
         document.getElementById("title").textContent = d.title;
         pollOrder = (d.polls || []).map((p) => (polls.set(p.id, p), p.id));
         if (d.stage) stage = d.stage;
+        isDemo = !!d.demo;
         renderStageBar(); renderPolls(); renderMessages();
       },
       onMsg: (m) => {
@@ -254,6 +270,7 @@
       onDel: ({ id }) => { const m = msgs.get(id); if (m) m.deleted = true; renderMessages(); },
       onRestore: ({ id }) => { const m = msgs.get(id); if (m) m.deleted = false; renderMessages(); },
       onPin: ({ id, on }) => { const m = msgs.get(id); if (m) { m.pinned = on; renderMessages(); } },
+      onEdit: ({ id, text }) => { const m = msgs.get(id); if (m) { m.text = text; renderMessages(); } },
       onVote: ({ poll, counts }) => {
         const p = polls.get(poll); if (p) p.counts = counts;
         const w = pollsEl.querySelector(`.poll[data-poll="${poll}"]`);
