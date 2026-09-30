@@ -77,10 +77,12 @@ header .code { color: var(--muted); font-size: 13px; }
 .tab.active { background: var(--accent); border-color: var(--accent); }
 .tab:disabled { opacity: .45; cursor: not-allowed; }
 .poll-hint { color: var(--muted); margin: 0; }
-.admin-layout { display: block; margin-top: 16px; }
-.admin-sidebar { position: fixed; z-index: 10; left: 20px; top: 20px; bottom: 20px; width: 208px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding: 12px; background: var(--card); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 8px 24px var(--shadow); }
+/* 사이드바+본문을 flex로 나란히: 창 너비가 뭐든 즉시 맞춰지고, 900px 아래에서만 위아래로 쌓인다
+   (고정 폭 사이드바 + 그만큼의 padding-left를 손으로 맞추던 예전 방식은 그 사이 어중간한 폭에서 깨졌다) */
+.admin-layout { display: flex; align-items: flex-start; gap: 20px; margin-top: 16px; }
+.admin-sidebar { position: sticky; z-index: 10; top: 20px; flex: 0 0 208px; width: 208px; max-height: calc(100vh - 40px); overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding: 12px; background: var(--card); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 8px 24px var(--shadow); }
 .sidebar-label { color: var(--muted); font-size: 11px; font-weight: 800; letter-spacing: .08em; margin: 6px 4px 2px; text-transform: uppercase; }
-.admin-content { min-width: 0; max-width: 900px; margin: 0 auto; }
+.admin-content { flex: 1; min-width: 0; max-width: 900px; }
 .admin-tab { background: var(--bg2); border: 1px solid var(--line); color: var(--fg); border-radius: 999px; padding: 8px 12px; }
 .admin-tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
 .unread-label { display: inline-block; margin-left: 5px; padding: 2px 7px; border-radius: 999px; background: var(--gold); color: var(--fg); font-size: 11px; font-weight: 800; }
@@ -235,7 +237,7 @@ button.ghost { background: var(--card); border: 1px solid var(--accent); color: 
 .report-link:hover { color: var(--accent); }
 
 /* --- 관리자 콘솔 --- */
-.wrap.admin { max-width: none; margin: 0; padding: 24px 24px 40px 252px; }
+.wrap.admin { max-width: 1200px; margin: 0 auto; padding: 24px 24px 40px; }
 .admin .code { margin-top: 4px; }
 .admin .code a { white-space: nowrap; }
 .panel { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 16px 18px; margin: 14px 0; box-shadow: 0 8px 24px var(--shadow); }
@@ -267,16 +269,12 @@ button.ghost.small, button.small { font-size: 13px; padding: 8px 12px; }
 .mini.danger:hover { border-color: #e5484d; color: #e5484d; }
 .poll-controls { display: flex; gap: 6px; margin-top: 8px; }
 @media (max-width: 620px) { .pollform { grid-template-columns: 1fr 1fr; } .pollform button { grid-column: 1 / -1; } }
-@media (max-width: 720px) {
-  .wrap.admin { padding-left: 194px; padding-right: 14px; }
-  .admin-sidebar { left: 10px; top: 10px; bottom: 10px; width: 170px; }
-  .admin-content { margin: 0; }
-  .sidebar-items { grid-template-columns: 1fr; }
-}
-@media (max-width: 500px) {
-  .wrap.admin { padding-left: 162px; padding-right: 10px; }
-  .admin-sidebar { left: 6px; top: 6px; bottom: 6px; width: 144px; padding: 8px; }
-  .admin-tab { padding: 8px 10px; }
+/* 맥북 스플릿뷰처럼 완전 폭도 폰도 아닌 어중간한 창 너비: 사이드바를 위로 쌓아 항상 전체 폭을 쓴다 */
+@media (max-width: 900px) {
+  .wrap.admin { padding: 16px; }
+  .admin-layout { flex-direction: column; }
+  .admin-sidebar { position: static; width: 100%; flex: none; max-height: none; }
+  .sidebar-items { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
 }
 @media (max-width: 620px) { .chat-toggle { top: 12px; right: 12px; width: 98px; height: 40px; font-size: 12px; } .chat-panel { top: 12px; right: 12px; width: calc(100vw - 24px); max-height: calc(100dvh - 24px); } }
 .export-bar { margin-top: 18px; text-align: center; }
