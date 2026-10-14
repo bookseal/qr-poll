@@ -67,3 +67,41 @@ cd ~/qr-chat && git pull && npm ci --omit=dev && sudo systemctl restart qr-chat
 실시간 채팅은 지속 연결(SSE/WebSocket)이 핵심인데 Vercel은 서버리스라 지속 연결이 약하고,
 실시간엔 Ably/Pusher/Supabase 같은 외부 서비스 + 외부 DB가 추가로 필요하다. 서버·도메인을
 이미 가진 지금은 단일 Node 프로세스 + Cloudflare Tunnel이 부품이 가장 적고 단순하다.
+
+## FutureReady Campus 병행 운영 (2026-10-14)
+
+기존 QR Poll/QR Chat 도메인을 유지하면서 `qr-poll.futurereadycampus.com`을
+같은 `localhost:3000`에 연결한다. `PUBLIC_ORIGIN=https://qr-poll.futurereadycampus.com`
+을 서비스 환경에 설정하면 QR, 공유·내보내기, 메일 링크를 새 주소로 생성한다.
+이 값은 비밀이 아니지만 실제 서비스 설정 파일은 저장소에 커밋하지 않는다.
+
+Cloudflare Access의 `qr-poll-team` 앱은 위 세 호스트 각각의 `admin*`, `presenter*`,
+`new*`, `demo*`를 팀 Allow 정책으로 보호한다. 참가 경로 `/r`, `/api`, `/stream`,
+`/msg`, `/react`, `/vote`, `/qr`와 참가 기록 이전 경로 `/identity`는 공개다.
+`/presenter`는 로그인 후 운영자 양식을 제공한다. 공개 홈에서 이 페이지로 직접
+이동해야 Access 로그인을 거칠 수 있다(공개 홈의 fetch 요청으로 로그인하지 않는다).
+기존 이벤트 adminKey 검사는 유지한다. `/demo`도 관리자 키로 연결하므로 보호한다.
+
+### 기존 참가자 기록
+
+새 행사 화면의 “기존 주소에서 참여한 기록 가져오기”에서 이전 주소를 선택한다.
+같은 브라우저의 기존 origin을 팝업으로 열어 행사별 작성자·투표 토큰과 표시 상태만
+가져온다. 정확한 origin, 팝업 창, 무작위 nonce를 모두 검증하는 postMessage를 사용한다.
+토큰은 URL·서버·로그에 보내지 않는다. 새 origin에는 행사별 토큰으로 저장해 다른
+행사의 참가 기록을 덮어쓰지 않는다. 기존 호스트의 저장값도 삭제하지 않는다.
+
+이미 새 주소에서 다른 식별값으로 참여한 행사는 병합하지 않고 안내한다. 기존에
+참여했던 기기·브라우저의 저장값이 없으면 복구할 수 없다. QR Poll과 QR Chat에
+각각 다른 참가 기록이 있으면 실제 참여한 주소를 골라야 한다.
+
+### 검증과 복구
+
+- `npm test`: 기존 자체 검사와 participant-identity 회귀 검사.
+- 격리한 행사와 새 브라우저에서 구 호스트 글 작성·투표 → 팝업 가져오기 →
+  새 호스트에서 본인 글 수정·투표 변경(추가 표가 아닌 기존 표 이동) → 구 호스트 동작 확인.
+- 비로그인 상태에서 세 호스트의 운영자 경로가 Access로 이동하고, 공개 참여·API·SSE가
+  통과하는지 확인한다. 대소문자·URL 인코딩 경로도 확인한다.
+- 배포 전 events/data 및 Tunnel 설정을 서버의 접근 제한된 백업 위치에 보존한다.
+  코드 복구 시 해당 커밋의 소스만 복원하며 events/data를 reset 또는 삭제하지 않는다.
+- 새 라우트 제거 시 기존 DNS와 데이터는 그대로 둔다. 새 Access 앱은 DNS/라우트를
+  정리한 뒤 삭제한다. 기존 Studio Access 앱은 삭제하지 않는다.

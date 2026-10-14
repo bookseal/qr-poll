@@ -1,3 +1,4 @@
+import { deviceToken, markUsed } from "/participant-identity.js";
 // 공용 헬퍼: SSE 구독 + 메시지 전송 + 👍 리액션. XSS 안전(textContent만 사용).
 export const esc = encodeURIComponent;
 
@@ -68,11 +69,12 @@ export async function send(code, text, pollId = "qa") {
   const r = await fetch(`/msg/${esc(code)}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text, pollId, token: reactionToken() }),
+    body: JSON.stringify({ text, pollId, token: reactionToken(code) }),
   });
   if (!r.ok) return null;
   const msg = await r.json();
   rememberMine(code, msg.id);
+  markUsed(localStorage, code);
   return msg;
 }
 
@@ -81,19 +83,13 @@ export async function editMessage(code, id, text) {
   const r = await fetch(`/msg/${esc(code)}/${id}/edit`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text, token: reactionToken() }),
+    body: JSON.stringify({ text, token: reactionToken(code) }),
   });
   return r.ok;
 }
 
-function reactionToken() {
-  const key = "qr-poll:reaction-device";
-  let token = localStorage.getItem(key);
-  if (!token) {
-    token = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    localStorage.setItem(key, token);
-  }
-  return token;
+function reactionToken(code) {
+  return deviceToken(localStorage, code, "reaction");
 }
 
 export async function react(code, id) {
@@ -102,9 +98,9 @@ export async function react(code, id) {
   const r = await fetch(`/react/${esc(code)}/${id}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ token: reactionToken() }),
+    body: JSON.stringify({ token: reactionToken(code) }),
   });
-  if (r.ok) localStorage.setItem(key, "1");
+  if (r.ok) { localStorage.setItem(key, "1"); markUsed(localStorage, code); }
 }
 
 // 메시지 li 생성 (텍스트 + ✏️ 편집(본인 글만) + 👍 버튼). textContent = XSS 안전.
@@ -184,12 +180,8 @@ export function setCount(root, id, n) {
 }
 
 export async function vote(code, pollId, opt, undo = false) {
-  const tokenKey = "qr-poll:vote-device";
-  let token = localStorage.getItem(tokenKey);
-  if (!token) {
-    token = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    localStorage.setItem(tokenKey, token);
-  }
+  const token = deviceToken(localStorage, code, "vote");
+  markUsed(localStorage, code);
   await fetch(`/vote/${esc(code)}/${esc(pollId)}/${opt}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

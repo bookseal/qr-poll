@@ -34,6 +34,12 @@
     const pathParts = location.pathname.split("/").filter(Boolean);
     const chatMode = pathParts.at(-1) === "chat";
     const code = chatMode ? pathParts.at(-2) : pathParts.at(-1);
+    const identityLink = document.createElement("a");
+    identityLink.href = `https://qr-poll.futurereadycampus.com/identity/import?code=${encodeURIComponent(code)}`;
+    identityLink.textContent = location.hostname === "qr-poll.futurereadycampus.com"
+      ? "기존 주소에서 참여한 기록 가져오기" : "기존 참여 기록을 유지하며 새 주소로 이동";
+    identityLink.style.cssText = "display:block;padding:10px;text-align:center;font-size:13px;background:#fff3df;color:#583700";
+    document.body.prepend(identityLink);
     const feed = document.getElementById("feed");
     const pollbox = document.getElementById("pollbox");
     const composer = document.getElementById("composer");

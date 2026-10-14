@@ -50,6 +50,7 @@
     </div>
   </div>
 
+  <script src="/client-config.js"></script>
   <script type="module">
     import { connect, renderPoll, updatePoll, sortMessages, adminAction } from "/app.js?v=21";
     const parts = location.pathname.split("/");
@@ -58,7 +59,7 @@
 
     document.getElementById("code").textContent = code;
     document.getElementById("present").href = `/present/${code}`;
-    document.getElementById("joinlink").href = `/r/${code}`;
+    document.getElementById("joinlink").href = `${window.QR_PUBLIC_ORIGIN || location.origin}/r/${code}`;
     if (!key) document.getElementById("warn").textContent =
       "⚠️ The admin key is missing from this URL. Controls will be disabled.";
 
@@ -318,7 +319,7 @@
       out.push(`Event code: ${code}`);
       if (adminMeta?.presenterEmail) out.push(`Presenter email: ${adminMeta.presenterEmail}`);
       if (key) out.push(`Admin key: ${key}   (keep private)`);
-      out.push(`Audience URL: ${location.origin}/r/${code}`);
+      out.push(`Audience URL: ${window.QR_PUBLIC_ORIGIN || location.origin}/r/${code}`);
       out.push(`Exported: ${new Date().toLocaleString()}`);
       out.push("");
 

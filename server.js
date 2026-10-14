@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, "data");
 const EVENTS_DIR = path.join(__dirname, "events");
+const PUBLIC_ORIGIN = process.env.PUBLIC_ORIGIN ? new URL(process.env.PUBLIC_ORIGIN).origin : "";
 const MAX_LEN = 500;
 const RATE_MS = 800; // ponytail: IP당 최소 간격. 분산 배포 땐 Redis로 승급.
 // 남용 방지용 상한(자원 한계가 아님). 이벤트 1개 ≈ 15KB라 수천 개도 부담 없다.
@@ -279,7 +280,17 @@ function addReaction(code, id, token = "") {
 }
 
 const app = express();
+app.set("case sensitive routing", true);
 app.use(express.json());
+app.get("/client-config.js", (req, res) => {
+  res.type("js").set("Cache-Control", "no-store").send(`window.QR_PUBLIC_ORIGIN=${JSON.stringify(PUBLIC_ORIGIN)};`);
+});
+app.get("/presenter", (req, res) => res.sendFile(path.join(__dirname, "public", "presenter.html")));
+for (const mode of ["import", "export"]) {
+  app.get(`/identity/${mode}`, (req, res) => res.set({
+    "Cache-Control": "no-store", "Referrer-Policy": "no-referrer", "X-Frame-Options": "DENY",
+  }).sendFile(path.join(__dirname, "public", "identity.html")));
+}
 // no-cache: Cloudflare가 JS/CSS를 굳혀서 낡은 번들을 서빙하지 않도록 (매 요청 재검증)
 app.use(
   express.static(path.join(__dirname, "public"), {
@@ -337,7 +348,7 @@ function eventsForEmail(email) {
 }
 
 function baseUrl(req) {
-  return `${req.headers["x-forwarded-proto"] || req.protocol}://${req.get("host")}`;
+  return PUBLIC_ORIGIN || `${req.headers["x-forwarded-proto"] || req.protocol}://${req.get("host")}`;
 }
 
 async function sendMagicLink(to, link) {
@@ -628,7 +639,7 @@ app.post("/admin/:code/poll/:id/move/:direction", (req, res) => {
 
 // QR (참가 URL 인코딩)
 app.get("/qr/:code.svg", async (req, res) => {
-  const base = `${req.headers["x-forwarded-proto"] || req.protocol}://${req.get("host")}`;
+  const base = baseUrl(req);
   const svg = await qrcode.toString(`${base}/r/${req.params.code}`, {
     type: "svg",
     margin: 1,
