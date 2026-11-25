@@ -10,7 +10,7 @@
 <body>
   <div class="present">
     <aside class="qr">
-      <img id="qr" alt="QR" style="width:100%" />
+      <a id="join" target="_blank" rel="noopener"><img id="qr" alt="QR" style="width:100%" /></a>
       <div class="big" id="code"></div>
       <div class="hint">Scan the QR code<br />to join anonymously</div>
     </aside>
@@ -32,18 +32,19 @@
     const sub = document.getElementById("sub");
     document.getElementById("code").textContent = code;
     document.getElementById("qr").src = `/qr/${encodeURIComponent(code)}.svg`;
+    document.getElementById("join").href = `/r/${encodeURIComponent(code)}`;
 
     const msgs = new Map();
     const polls = new Map();
     let stage = { focus: "qa", sort: "recent" };
-    const qa = { id: "qa", q: "Say Anything", type: "text", sort: "recent" };
 
     function render() {
       if (stage.focus === "qa") {
         pollbox.hidden = true;
-        feed.hidden = true;
-        feed.replaceChildren();
-        sub.textContent = "";
+        feed.hidden = !stage.projectChat;
+        const list = stage.projectChat ? [...msgs.values()].filter((m) => m.pollId === "qa") : [];
+        feed.replaceChildren(...sortMessages(list, stage.sort).map((m) => buildLi(code, m)));
+        sub.textContent = stage.projectChat ? `Say Anything · ${list.length} messages` : "";
       } else {
         feed.hidden = true;
         pollbox.hidden = false;
@@ -82,7 +83,12 @@
           if (w) updatePoll(w, counts);
         }
       },
-      onStage: (s) => { stage = { focus: s.focus, sort: s.sort }; render(); },
+      onStage: (s) => {
+        stage = s;
+        const poll = polls.get(s.focus);
+        if (poll) poll.sort = s.sort;
+        render();
+      },
       onPolls: (items) => { polls.clear(); items.forEach((p) => polls.set(p.id, p)); render(); },
     });
   </script>

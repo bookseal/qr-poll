@@ -48,7 +48,7 @@
     </form>
   </main>
   <script type="module">
-    import { connect, send, buildLi, setCount, renderPoll, updatePoll, upgradeAuthorship } from "/app.js?v=22";
+    import { connect, send, buildLi, setCount, renderPoll, sortMessages, updatePoll, upgradeAuthorship } from "/app.js?v=23";
     const pathParts = location.pathname.split("/").filter(Boolean);
     const chatMode = pathParts.at(-1) === "chat";
     const code = chatMode ? pathParts.at(-2) : pathParts.at(-1);
@@ -73,6 +73,7 @@
     const msgs = new Map();
     let stage = { focus: "qa", sort: "recent" };
     let active = "qa";
+    let initialMessagesLoaded = false;
     const chatPanel = document.getElementById("chatPanel");
     const chatToggle = document.getElementById("chatToggle");
     const chatClose = document.getElementById("chatClose");
@@ -152,6 +153,19 @@
       else chatLatest.hidden = false;
     }
 
+    function renderPollResponses() {
+      const responses = [...msgs.values()].filter((m) => m.pollId === active);
+      const rows = new Map([...feed.children].map((row) => [row.dataset.id, row]));
+      const focused = feed.contains(document.activeElement) ? document.activeElement : null;
+      const sorted = sortMessages(responses, polls.get(active)?.sort);
+      sorted.forEach((message, index) => {
+        const row = rows.get(String(message.id)) || buildLi(code, message);
+        if (feed.children[index] !== row) feed.insertBefore(row, feed.children[index] || null);
+      });
+      while (feed.children.length > sorted.length) feed.lastElementChild.remove();
+      if (focused?.isConnected && document.activeElement !== focused) focused.focus({ preventScroll: true });
+    }
+
     function applyStage() {
       const focus = stage.focus;
       if (active !== focus) active = focus;
@@ -163,8 +177,8 @@
         composer.hidden = !textMode;
         pollbox.hidden = false;
         pollbox.replaceChildren(renderPoll(code, p, true));
-        const list = [...msgs.values()].filter((m) => m.pollId === active);
-        feed.replaceChildren(...list.map((m) => buildLi(code, m)));
+        if (textMode) renderPollResponses();
+        else feed.replaceChildren();
       } else {
         pollbox.hidden = true;
         pollbox.replaceChildren();
@@ -196,20 +210,30 @@
           }
           return;
         }
-        if (!chatMode && m.pollId === active) {
-          const atBottom = window.innerHeight + window.scrollY >= document.body.scrollHeight - 60;
-          const li = buildLi(code, m); feed.append(li);
-          if (atBottom) li.scrollIntoView({ behavior: "smooth" });
-        }
+        if (!chatMode && initialMessagesLoaded && m.pollId === active) renderPollResponses();
       },
-      onReact: ({ id, reactions }) => { setCount(feed, id, reactions); setCount(chatFeed, id, reactions); },
+      onReact: ({ id, reactions }) => {
+        const m = msgs.get(id);
+        if (!m) return;
+        m.reactions = reactions;
+        setCount(feed, id, reactions);
+        setCount(chatFeed, id, reactions);
+        if (!chatMode && m.pollId === active && polls.get(active)?.sort === "top") renderPollResponses();
+      },
       onDel: ({ id }) => {
         msgs.delete(id);
         feed.querySelector(`li[data-id="${id}"]`)?.remove();
         chatFeed.querySelector(`li[data-id="${id}"]`)?.remove();
         chatEmpty.hidden = chatFeed.childElementCount > 0;
       },
-      onPin: ({ id, on }) => { feed.querySelector(`li[data-id="${id}"]`)?.classList.toggle("pinned", on); chatFeed.querySelector(`li[data-id="${id}"]`)?.classList.toggle("pinned", on); },
+      onPin: ({ id, on }) => {
+        const m = msgs.get(id);
+        if (!m) return;
+        m.pinned = on;
+        feed.querySelector(`li[data-id="${id}"]`)?.classList.toggle("pinned", on);
+        chatFeed.querySelector(`li[data-id="${id}"]`)?.classList.toggle("pinned", on);
+        if (!chatMode && m.pollId === active) renderPollResponses();
+      },
       onEdit: ({ id, text }) => {
         const m = msgs.get(id); if (m) m.text = text;
         const t = feed.querySelector(`li[data-id="${id}"] .txt`); if (t) t.textContent = text;
@@ -222,13 +246,23 @@
           if (w) updatePoll(w, counts);
         }
       },
-      onStage: (s) => { if (!chatMode) { stage = s; applyStage(); } },
+      onStage: (s) => {
+        if (chatMode) return;
+        stage = s;
+        const poll = polls.get(s.focus);
+        if (poll) poll.sort = s.sort;
+        applyStage();
+      },
       onPolls: (items) => {
         if (chatMode) return;
         polls.clear(); items.forEach((p) => polls.set(p.id, p)); applyStage();
       },
     }).then(() => {
-      if (!chatMode) return;
+      initialMessagesLoaded = true;
+      if (!chatMode) {
+        if (polls.get(active)?.type === "text") renderPollResponses();
+        return;
+      }
       chatEmpty.hidden = chatFeed.childElementCount > 0;
       chatFeed.setAttribute("aria-live", "polite");
     });

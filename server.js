@@ -78,7 +78,7 @@ function room(code) {
   if (r) return r;
   // stage: 강사가 프로젝터에 무엇을 어떻게 띄울지 (라이브 상태, 영속 안 함)
   const meta = eventMeta(code);
-  r = { clients: new Set(), messages: [], byId: new Map(), reactors: new Map(), votes: {}, voters: {}, stage: { focus: QA_ID, sort: meta?.qaSort || "recent" } };
+  r = { clients: new Set(), messages: [], byId: new Map(), reactors: new Map(), votes: {}, voters: {}, stage: { focus: QA_ID, sort: meta?.qaSort || "recent", projectChat: false } };
   const f = path.join(DATA_DIR, `${code}.jsonl`);
   if (fs.existsSync(f)) {
     for (const line of fs.readFileSync(f, "utf8").split("\n")) {
@@ -171,9 +171,9 @@ function pinMessage(code, id, on) {
   return true;
 }
 
-function setStage(code, focus, sort) {
+function setStage(code, focus, sort, projectChat = false) {
   const r = room(code);
-  r.stage = { focus, sort };
+  r.stage = { focus, sort, projectChat: focus === QA_ID && projectChat };
   const meta = normalizeMeta(eventMeta(code));
   if (focus === QA_ID) meta.qaSort = sort;
   else {
@@ -570,7 +570,7 @@ app.post("/admin/:code/stage", (req, res) => {
   const sort = req.body?.sort === "top" ? "top" : "recent";
   if (focus !== QA_ID && !(meta.polls || []).some((p) => p.id === focus))
     return res.status(400).json({ error: "bad focus" });
-  res.json(setStage(req.params.code, focus, sort));
+  res.json(setStage(req.params.code, focus, sort, req.body?.projectChat === true));
 });
 
 function validPollInput(body, existingId = null) {
@@ -718,7 +718,13 @@ function selftest() {
   const r2 = room(code);
   assert(visibleMessages(code).length === 2, "delete persists across reload");
   assert(r2.byId.get(1).pinned === true, "pin persists across reload");
-  assert(setStage(code, QA_ID, "top").sort === "top", "stage set");
+  assert.equal(setStage(code, QA_ID, "top").sort, "top", "stage sort is saved");
+  assert.equal(r2.stage.projectChat, false, "idle stage keeps chat off screen");
+  assert.equal(setStage(code, QA_ID, "top", true).projectChat, true, "chat is projected when explicitly selected");
+  assert.equal(setStage(code, "p1", "recent", true).projectChat, false, "polls turn off chat projection");
+  setStage(code, QA_ID, "top", true);
+  rooms.delete(code);
+  assert.equal(room(code).stage.projectChat, false, "chat projection resets on reload");
 
   const nc = newCode();
   assert(/^\d{7}$/.test(nc) && !eventMeta(nc), "newCode: 7-digit, unused");
