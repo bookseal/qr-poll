@@ -36,15 +36,14 @@
     const msgs = new Map();
     const polls = new Map();
     let stage = { focus: "qa", sort: "recent" };
-    const qa = { id: "qa", q: "Say Anything", type: "text", sort: "recent" };
 
     function render() {
       if (stage.focus === "qa") {
         pollbox.hidden = true;
-        feed.hidden = false;
-        const list = [...msgs.values()].filter((m) => (m.pollId || "qa") === "qa");
+        feed.hidden = !stage.projectChat;
+        const list = stage.projectChat ? [...msgs.values()].filter((m) => m.pollId === "qa") : [];
         feed.replaceChildren(...sortMessages(list, stage.sort).map((m) => buildLi(code, m)));
-        sub.textContent = `${list.length} messages · ${stage.sort === "top" ? "Popular" : "Recent"}`;
+        sub.textContent = stage.projectChat ? `Say Anything · ${list.length} messages` : "";
       } else {
         feed.hidden = true;
         pollbox.hidden = false;
@@ -83,7 +82,12 @@
           if (w) updatePoll(w, counts);
         }
       },
-      onStage: (s) => { stage = { focus: s.focus, sort: s.sort }; render(); },
+      onStage: (s) => {
+        stage = s;
+        const poll = polls.get(s.focus);
+        if (poll) poll.sort = s.sort;
+        render();
+      },
       onPolls: (items) => { polls.clear(); items.forEach((p) => polls.set(p.id, p)); render(); },
     });
   </script>

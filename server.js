@@ -1,6 +1,7 @@
 import express from "express";
 import qrcode from "qrcode";
 import fs from "node:fs";
+import assert from "node:assert/strict";
 import path from "node:path";
 import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
@@ -77,7 +78,7 @@ function room(code) {
   if (r) return r;
   // stage: 강사가 프로젝터에 무엇을 어떻게 띄울지 (라이브 상태, 영속 안 함)
   const meta = eventMeta(code);
-  r = { clients: new Set(), messages: [], byId: new Map(), reactors: new Map(), votes: {}, voters: {}, stage: { focus: QA_ID, sort: meta?.qaSort || "recent" } };
+  r = { clients: new Set(), messages: [], byId: new Map(), reactors: new Map(), votes: {}, voters: {}, stage: { focus: QA_ID, sort: meta?.qaSort || "recent", projectChat: false } };
   const f = path.join(DATA_DIR, `${code}.jsonl`);
   if (fs.existsSync(f)) {
     for (const line of fs.readFileSync(f, "utf8").split("\n")) {
@@ -170,9 +171,9 @@ function pinMessage(code, id, on) {
   return true;
 }
 
-function setStage(code, focus, sort) {
+function setStage(code, focus, sort, projectChat = false) {
   const r = room(code);
-  r.stage = { focus, sort };
+  r.stage = { focus, sort, projectChat: focus === QA_ID && projectChat };
   const meta = normalizeMeta(eventMeta(code));
   if (focus === QA_ID) meta.qaSort = sort;
   else {
@@ -569,7 +570,7 @@ app.post("/admin/:code/stage", (req, res) => {
   const sort = req.body?.sort === "top" ? "top" : "recent";
   if (focus !== QA_ID && !(meta.polls || []).some((p) => p.id === focus))
     return res.status(400).json({ error: "bad focus" });
-  res.json(setStage(req.params.code, focus, sort));
+  res.json(setStage(req.params.code, focus, sort, req.body?.projectChat === true));
 });
 
 function validPollInput(body, existingId = null) {
@@ -669,71 +670,77 @@ function selftest() {
   fs.writeFileSync(path.join(EVENTS_DIR, `${code}.json`), JSON.stringify({ code, title: "t" }));
   fs.rmSync(path.join(DATA_DIR, `${code}.jsonl`), { force: true });
   const a = addMessage(code, "hello", QA_ID, "author-1");
-  console.assert(a.id === 1 && a.text === "hello", "first message");
+  assert(a.id === 1 && a.text === "hello", "first message");
   addMessage(code, "world");
-  console.assert(editMessage(code, 1, "hi there", "author-1")?.text === "hi there", "author can edit own message");
-  console.assert(editMessage(code, 1, "nope", "other-device") === null, "other device cannot edit");
-  console.assert(room(code).byId.get(1).text === "hi there", "edit from wrong token rejected");
+  assert(editMessage(code, 1, "hi there", "author-1")?.text === "hi there", "author can edit own message");
+  assert(editMessage(code, 1, "nope", "other-device") === null, "other device cannot edit");
+  assert(room(code).byId.get(1).text === "hi there", "edit from wrong token rejected");
   addReaction(code, 1);
   addReaction(code, 1);
-  console.assert(room(code).byId.get(1).reactions === 2, "reactions counted");
-  console.assert(addReaction(code, 1, "device-1") === 3, "first device reaction");
-  console.assert(addReaction(code, 1, "device-1") === 3, "duplicate device reaction ignored");
-  console.assert(addReaction(code, 999) === null, "react to missing msg -> null");
+  assert(room(code).byId.get(1).reactions === 2, "reactions counted");
+  assert(addReaction(code, 1, "device-1") === 3, "first device reaction");
+  assert(addReaction(code, 1, "device-1") === 3, "duplicate device reaction ignored");
+  assert(addReaction(code, 999) === null, "react to missing msg -> null");
   const poll = { id: "p1", q: "?", options: ["a", "b", "c"] };
   addVote(code, poll, 0);
   addVote(code, poll, 2);
   addVote(code, poll, 2);
-  console.assert(addVote(code, poll, 9) === null, "out-of-range option -> null");
-  console.assert(JSON.stringify(pollCounts(code, poll)) === "[1,0,2]", "vote counts");
+  assert(addVote(code, poll, 9) === null, "out-of-range option -> null");
+  assert(JSON.stringify(pollCounts(code, poll)) === "[1,0,2]", "vote counts");
   rooms.delete(code); // 파일에서 다시 로드되는지 확인
   const reloaded = room(code);
-  console.assert(reloaded.messages.length === 2, "reload from jsonl");
-  console.assert(reloaded.byId.get(1).reactions === 3, "reactions persist across reload");
-  console.assert(reloaded.byId.get(1).text === "hi there", "edit persists across reload");
-  console.assert(!("token" in publicMessages(code)[0]), "public API never leaks author token");
-  console.assert(JSON.stringify(pollCounts(code, poll)) === "[1,0,2]", "votes persist across reload");
+  assert(reloaded.messages.length === 2, "reload from jsonl");
+  assert(reloaded.byId.get(1).reactions === 3, "reactions persist across reload");
+  assert(reloaded.byId.get(1).text === "hi there", "edit persists across reload");
+  assert(!("token" in publicMessages(code)[0]), "public API never leaks author token");
+  assert(JSON.stringify(pollCounts(code, poll)) === "[1,0,2]", "votes persist across reload");
   // 단일 선택: 같은 기기가 바꾸면 이전 표 이동 / 복수 선택: 누적, 개별 취소
   const single = { id: "p2", options: ["a", "b", "c"] };
   addVote(code, single, 0, "dev");
-  console.assert(JSON.stringify(addVote(code, single, 1, "dev")) === "[0,1,0]", "single: vote moves");
+  assert(JSON.stringify(addVote(code, single, 1, "dev")) === "[0,1,0]", "single: vote moves");
   const multi = { id: "p3", options: ["a", "b", "c"], multi: true };
   addVote(code, multi, 0, "dev");
   addVote(code, multi, 2, "dev");
-  console.assert(JSON.stringify(addVote(code, multi, 2, "dev")) === "[1,0,1]", "multi: accumulates, dup ignored");
-  console.assert(JSON.stringify(removeVote(code, multi, "dev", 0)) === "[0,0,1]", "multi: undo one option");
+  assert(JSON.stringify(addVote(code, multi, 2, "dev")) === "[1,0,1]", "multi: accumulates, dup ignored");
+  assert(JSON.stringify(removeVote(code, multi, "dev", 0)) === "[0,0,1]", "multi: undo one option");
   fs.appendFileSync(path.join(DATA_DIR, `${code}.jsonl`), JSON.stringify({ t: "uv", poll: "p2", token: "dev" }) + "\n"); // 옛 형식 uv
   rooms.delete(code);
-  console.assert(JSON.stringify(pollCounts(code, single)) === "[0,0,0]", "legacy uv clears single vote");
-  console.assert(JSON.stringify(pollCounts(code, multi)) === "[0,0,1]", "multi votes persist across reload");
+  assert(JSON.stringify(pollCounts(code, single)) === "[0,0,0]", "legacy uv clears single vote");
+  assert(JSON.stringify(pollCounts(code, multi)) === "[0,0,1]", "multi votes persist across reload");
   // 삭제/고정/stage
   addMessage(code, "삭제될 메시지");
-  console.assert(visibleMessages(code).length === 3, "3 visible before delete");
+  assert(visibleMessages(code).length === 3, "3 visible before delete");
   delMessage(code, 3);
-  console.assert(visibleMessages(code).length === 2, "hidden after delete");
+  assert(visibleMessages(code).length === 2, "hidden after delete");
   pinMessage(code, 1, true);
-  console.assert(room(code).byId.get(1).pinned === true, "pinned");
+  assert(room(code).byId.get(1).pinned === true, "pinned");
   rooms.delete(code);
   const r2 = room(code);
-  console.assert(visibleMessages(code).length === 2, "delete persists across reload");
-  console.assert(r2.byId.get(1).pinned === true, "pin persists across reload");
-  console.assert(setStage(code, QA_ID, "top").sort === "top", "stage set");
+  assert(visibleMessages(code).length === 2, "delete persists across reload");
+  assert(r2.byId.get(1).pinned === true, "pin persists across reload");
+  assert.equal(setStage(code, QA_ID, "top").sort, "top", "stage sort is saved");
+  assert.equal(r2.stage.projectChat, false, "idle stage keeps chat off screen");
+  assert.equal(setStage(code, QA_ID, "top", true).projectChat, true, "chat is projected when explicitly selected");
+  assert.equal(setStage(code, "p1", "recent", true).projectChat, false, "polls turn off chat projection");
+  setStage(code, QA_ID, "top", true);
+  rooms.delete(code);
+  assert.equal(room(code).stage.projectChat, false, "chat projection resets on reload");
 
   const nc = newCode();
-  console.assert(/^\d{7}$/.test(nc) && !eventMeta(nc), "newCode: 7-digit, unused");
-  console.assert(typeof eventCount() === "number", "eventCount");
+  assert(/^\d{7}$/.test(nc) && !eventMeta(nc), "newCode: 7-digit, unused");
+  assert(typeof eventCount() === "number", "eventCount");
   const cleanTitle = "  ".concat("x".repeat(200)).trim().slice(0, MAX_TITLE);
-  console.assert(cleanTitle.length === MAX_TITLE, "title clamped to MAX_TITLE");
+  assert(cleanTitle.length === MAX_TITLE, "title clamped to MAX_TITLE");
   const validate = (t) => {
     t = (t ?? "").toString().trim();
     if (!t) return "empty";
     if (t.length > MAX_LEN) return "too long";
     return null;
   };
-  console.assert(validate("") === "empty", "empty rejected");
-  console.assert(validate("  ") === "empty", "whitespace rejected");
-  console.assert(validate("x".repeat(MAX_LEN + 1)) === "too long", "length rejected");
-  console.assert(validate("ok") === null, "valid accepted");
+  assert(validate("") === "empty", "empty rejected");
+  assert(validate("  ") === "empty", "whitespace rejected");
+  assert(validate("x".repeat(MAX_LEN + 1)) === "too long", "length rejected");
+  assert(validate("ok") === null, "valid accepted");
   fs.rmSync(path.join(EVENTS_DIR, `${code}.json`), { force: true });
   fs.rmSync(path.join(DATA_DIR, `${code}.jsonl`), { force: true });
   console.log("selftest ok");
