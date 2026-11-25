@@ -119,7 +119,10 @@ export function buildLi(code, m) {
   btn.innerHTML = `👍 <b>${m.reactions || 0}</b>`;
   btn.onclick = async () => { await react(code, m.id); btn.classList.add("reacted"); btn.disabled = true; };
   li.append(txt);
-  if (isMine(code, m.id)) li.append(editButton(li, code, m, txt));
+  if (isMine(code, m.id)) {
+    li.classList.add("is-mine");
+    li.append(editButton(li, code, m, txt));
+  }
   li.append(btn);
   return li;
 }
@@ -129,6 +132,7 @@ function editButton(li, code, m, txt) {
   edit.type = "button";
   edit.className = "edit";
   edit.textContent = "✏️";
+  edit.setAttribute("aria-label", "Edit message");
   edit.onclick = () => startEdit(li, code, m, txt, edit);
   return edit;
 }
@@ -140,6 +144,7 @@ export function upgradeAuthorship(container, code, m) {
   const li = container.querySelector(`li[data-id="${m.id}"]`);
   const txt = li?.querySelector(".txt");
   if (!txt || li.querySelector(".edit")) return;
+  li.classList.add("is-mine");
   txt.after(editButton(li, code, m, txt));
 }
 
