@@ -2,35 +2,53 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
   <meta name="color-scheme" content="light" />
   <title>QR Poll · Audience</title>
-  <link rel="stylesheet" href="/style.css?v=21" />
+  <link rel="stylesheet" href="/style.css?v=22" />
 </head>
 <body>
-  <div class="wrap">
-    <header>
-      <h1 id="title">…</h1>
-      <div class="code">🙋 Audience · anonymous participation · code <span id="code"></span></div>
+  <main class="wrap" id="pollPage">
+    <header class="audience-head">
+      <div>
+        <h1 id="title">…</h1>
+        <div class="code">🙋 Audience · anonymous participation · code <span id="code"></span></div>
+      </div>
+      <a id="chatToggle" class="chat-toggle">Open chat</a>
     </header>
     <nav id="tabs" class="tabs" aria-label="Polls"></nav>
     <div id="pollbox"></div>
     <ul id="feed"></ul>
-  </div>
+  </main>
   <div class="composer" id="composer" hidden>
     <form class="inner" id="form">
       <textarea id="text" rows="1" maxlength="500" placeholder="Write anonymously…" required></textarea>
       <button id="send">Send</button>
     </form>
   </div>
-  <a id="chatToggle" class="chat-toggle" aria-label="Open Say Anything">Say Anything</a>
-  <aside id="chatPanel" class="chat-panel" hidden aria-label="Say Anything">
-    <div class="chat-head"><div><strong>Say Anything</strong><small>Open conversation</small></div><a id="chatClose" class="chat-close" aria-label="Back to polls" href="#">×</a></div>
-    <ul id="chatFeed" class="chat-feed"></ul>
-    <form class="chat-composer" id="chatForm"><textarea id="chatText" rows="1" maxlength="500" placeholder="Say anything…" required></textarea><button id="chatSend">Send</button></form>
-  </aside>
+  <main id="chatPanel" class="chat-panel" hidden aria-labelledby="chatTitle">
+    <header class="chat-head">
+      <a id="chatClose" class="chat-close"><span aria-hidden="true">←</span> Polls</a>
+      <div class="chat-heading">
+        <h1 id="chatTitle">Say Anything</h1>
+        <p id="chatEvent"></p>
+      </div>
+    </header>
+    <div class="chat-history">
+      <div id="chatScroll" class="chat-scroll" tabindex="0" aria-label="Chat messages" role="region">
+        <ul id="chatFeed" class="chat-feed" aria-live="off" aria-relevant="additions"></ul>
+      </div>
+      <p id="chatEmpty" class="chat-empty" hidden>No messages yet. Start the conversation.</p>
+      <button id="chatLatest" class="chat-latest" type="button" hidden>Latest messages ↓</button>
+    </div>
+    <form class="chat-composer" id="chatForm">
+      <p id="chatError" class="chat-error" role="status" hidden></p>
+      <textarea id="chatText" rows="1" maxlength="500" placeholder="Message anonymously…" aria-label="Message" required></textarea>
+      <button id="chatSend" type="submit">Send</button>
+    </form>
+  </main>
   <script type="module">
-    import { connect, send, buildLi, setCount, renderPoll, updatePoll, upgradeAuthorship } from "/app.js?v=21";
+    import { connect, send, buildLi, setCount, renderPoll, updatePoll, upgradeAuthorship } from "/app.js?v=22";
     const pathParts = location.pathname.split("/").filter(Boolean);
     const chatMode = pathParts.at(-1) === "chat";
     const code = chatMode ? pathParts.at(-2) : pathParts.at(-1);
@@ -55,22 +73,34 @@
     const msgs = new Map();
     let stage = { focus: "qa", sort: "recent" };
     let active = "qa";
-    let chatOpen = chatMode;
-    let unreadChat = 0;
-    const qa = { id: "qa", q: "Say Anything", type: "text", sort: "recent" };
     const chatPanel = document.getElementById("chatPanel");
     const chatToggle = document.getElementById("chatToggle");
+    const chatClose = document.getElementById("chatClose");
     const chatFeed = document.getElementById("chatFeed");
+    const chatScroll = document.getElementById("chatScroll");
+    const chatEmpty = document.getElementById("chatEmpty");
+    const chatLatest = document.getElementById("chatLatest");
+    let followingLatest = true;
     const chatReadKey = `qr-poll:chat-read:${code}`;
+    const chatTime = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" });
     const markChatRead = () => localStorage.setItem(chatReadKey, String(Date.now()));
+    const pollPath = `/r/${encodeURIComponent(code)}`;
+    chatToggle.href = `${pollPath}/chat${location.search}`;
+    chatClose.href = `${pollPath}${location.search}`;
     document.body.classList.toggle("chat-page", chatMode);
-    chatToggle.href = `/r/${encodeURIComponent(code)}/chat`;
-    chatClose.href = `/r/${encodeURIComponent(code)}`;
-    chatToggle.hidden = chatMode;
+    document.getElementById("pollPage").hidden = chatMode;
     chatPanel.hidden = !chatMode;
-    chatToggle.addEventListener("click", markChatRead);
-    document.getElementById("chatClose").addEventListener("click", markChatRead);
-    if (chatMode) markChatRead();
+    if (chatMode) {
+      document.title = "Say Anything · QR Poll";
+      markChatRead();
+      const viewport = window.visualViewport;
+      viewport?.addEventListener("resize", () => {
+        if (viewport.scale === 1) document.body.style.setProperty("--chat-viewport", `${viewport.height}px`);
+      });
+      new ResizeObserver(() => {
+        if (followingLatest) scrollToLatest();
+      }).observe(chatScroll);
+    }
 
     function tabs() {
       const items = [...polls.values()];
@@ -87,27 +117,50 @@
       activeBtn?.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
     }
 
-    function renderChat() {
-      const list = [...msgs.values()].filter((m) => (m.pollId || "qa") === "qa");
-      chatFeed.replaceChildren(...list.map((m) => buildLi(code, m)));
-      if (chatOpen) { unreadChat = 0; chatToggle.classList.remove("has-unread"); }
+    function nearLatest() {
+      return chatScroll.scrollHeight - chatScroll.scrollTop - chatScroll.clientHeight < 48;
     }
 
-    function setChat(open) {
-      chatOpen = open;
-      chatToggle.classList.toggle("open", open);
-      if (open) renderChat();
+    function scrollToLatest() {
+      followingLatest = true;
+      chatScroll.scrollTop = chatScroll.scrollHeight;
+      chatLatest.hidden = true;
+    }
+
+    chatScroll.addEventListener("scroll", () => {
+      followingLatest = nearLatest();
+      chatLatest.hidden = followingLatest;
+    });
+    chatLatest.addEventListener("click", () => {
+      chatScroll.focus({ preventScroll: true });
+      scrollToLatest();
+    });
+
+    function appendChatMessage(m) {
+      if (chatFeed.querySelector(`li[data-id="${m.id}"]`)) return;
+      const row = buildLi(code, m);
+      const date = new Date(m.ts);
+      if (Number.isFinite(date.getTime())) {
+        const time = document.createElement("time");
+        time.dateTime = date.toISOString();
+        time.textContent = chatTime.format(date);
+        row.append(time);
+      }
+      chatFeed.append(row);
+      chatEmpty.hidden = true;
+      if (followingLatest) scrollToLatest();
+      else chatLatest.hidden = false;
     }
 
     function applyStage() {
       const focus = stage.focus;
       if (active !== focus) active = focus;
-      const p = active === qa.id ? null : polls.get(active);
+      const p = polls.get(active);
       tabs();
       if (p) {
         const textMode = p.type === "text";
         feed.hidden = !textMode;
-        composer.hidden = !textMode; // qa(Say Anything)는 아래 chat-panel의 자체 composer를 쓴다
+        composer.hidden = !textMode;
         pollbox.hidden = false;
         pollbox.replaceChildren(renderPoll(code, p, true));
         const list = [...msgs.values()].filter((m) => m.pollId === active);
@@ -119,32 +172,43 @@
         composer.hidden = true;
         feed.replaceChildren();
       }
-      renderChat();
     }
 
     connect(code, {
       onMeta: (d) => {
+        if (chatMode) {
+          document.getElementById("chatEvent").textContent = d.title;
+          return;
+        }
         document.getElementById("title").textContent = d.title;
         (d.polls || []).forEach((p) => polls.set(p.id, p));
         if (d.stage) stage = d.stage;
-        (d.qa ? [d.qa] : []).forEach((p) => Object.assign(qa, p));
-        (d.polls || []).forEach((p) => polls.set(p.id, p));
-        active = stage.focus === "qa" ? qa.id : stage.focus;
         applyStage();
       },
       onMsg: (m) => {
+        if (msgs.has(m.id)) return;
         msgs.set(m.id, m);
-        if (m.pollId === active) {
+        if ((m.pollId || "qa") === "qa") {
+          if (chatMode) appendChatMessage(m);
+          else if (m.ts > Number(localStorage.getItem(chatReadKey) || 0)) {
+            chatToggle.classList.add("has-unread");
+            chatToggle.setAttribute("aria-label", "Open chat, unread messages");
+          }
+          return;
+        }
+        if (!chatMode && m.pollId === active) {
           const atBottom = window.innerHeight + window.scrollY >= document.body.scrollHeight - 60;
           const li = buildLi(code, m); feed.append(li);
           if (atBottom) li.scrollIntoView({ behavior: "smooth" });
         }
-        const lastRead = Number(localStorage.getItem(chatReadKey) || 0);
-        if ((m.pollId || "qa") === "qa" && !chatOpen && m.ts > lastRead) { unreadChat++; chatToggle.classList.add("has-unread"); }
-        renderChat();
       },
       onReact: ({ id, reactions }) => { setCount(feed, id, reactions); setCount(chatFeed, id, reactions); },
-      onDel: ({ id }) => { msgs.delete(id); feed.querySelector(`li[data-id="${id}"]`)?.remove(); chatFeed.querySelector(`li[data-id="${id}"]`)?.remove(); },
+      onDel: ({ id }) => {
+        msgs.delete(id);
+        feed.querySelector(`li[data-id="${id}"]`)?.remove();
+        chatFeed.querySelector(`li[data-id="${id}"]`)?.remove();
+        chatEmpty.hidden = chatFeed.childElementCount > 0;
+      },
       onPin: ({ id, on }) => { feed.querySelector(`li[data-id="${id}"]`)?.classList.toggle("pinned", on); chatFeed.querySelector(`li[data-id="${id}"]`)?.classList.toggle("pinned", on); },
       onEdit: ({ id, text }) => {
         const m = msgs.get(id); if (m) m.text = text;
@@ -158,8 +222,15 @@
           if (w) updatePoll(w, counts);
         }
       },
-      onStage: (s) => { stage = { focus: s.focus, sort: s.sort }; applyStage(); },
-      onPolls: (items) => { polls.clear(); items.forEach((p) => polls.set(p.id, p)); applyStage(); },
+      onStage: (s) => { if (!chatMode) { stage = s; applyStage(); } },
+      onPolls: (items) => {
+        if (chatMode) return;
+        polls.clear(); items.forEach((p) => polls.set(p.id, p)); applyStage();
+      },
+    }).then(() => {
+      if (!chatMode) return;
+      chatEmpty.hidden = chatFeed.childElementCount > 0;
+      chatFeed.setAttribute("aria-live", "polite");
     });
 
     const form = document.getElementById("form");
@@ -180,12 +251,30 @@
 
     const chatForm = document.getElementById("chatForm");
     const chatText = document.getElementById("chatText");
+    const chatSend = document.getElementById("chatSend");
+    const chatError = document.getElementById("chatError");
     chatForm.addEventListener("submit", async (e) => {
-      e.preventDefault(); const v = chatText.value.trim(); if (!v) return;
-      chatText.value = "";
-      const msg = await send(code, v, "qa");
-      if (!msg) chatText.value = v;
-      else upgradeAuthorship(chatFeed, code, msg);
+      e.preventDefault();
+      const draft = chatText.value;
+      const text = draft.trim();
+      if (!text || chatSend.disabled) return;
+      chatSend.disabled = true;
+      chatError.hidden = true;
+      try {
+        const msg = await send(code, text, "qa");
+        if (!msg) throw new Error("Message not sent");
+        if (chatText.value === draft) chatText.value = "";
+        const message = msgs.get(msg.id) || msg;
+        msgs.set(msg.id, message);
+        appendChatMessage(message);
+        upgradeAuthorship(chatFeed, code, message);
+        scrollToLatest();
+      } catch {
+        chatError.textContent = "Message couldn’t be sent. Try again.";
+        chatError.hidden = false;
+      } finally {
+        chatSend.disabled = false;
+      }
     });
     chatText.addEventListener("keydown", (e) => {
       if (e.isComposing || e.keyCode === 229) return;
