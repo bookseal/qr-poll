@@ -157,7 +157,7 @@
       const responses = [...msgs.values()].filter((m) => m.pollId === active);
       const rows = new Map([...feed.children].map((row) => [row.dataset.id, row]));
       const focused = feed.contains(document.activeElement) ? document.activeElement : null;
-      const sorted = sortMessages(responses, polls.get(active)?.sort);
+      const sorted = sortMessages(responses, "top");
       sorted.forEach((message, index) => {
         const row = rows.get(String(message.id)) || buildLi(code, message);
         if (feed.children[index] !== row) feed.insertBefore(row, feed.children[index] || null);
@@ -218,7 +218,7 @@
         m.reactions = reactions;
         setCount(feed, id, reactions);
         setCount(chatFeed, id, reactions);
-        if (!chatMode && m.pollId === active && polls.get(active)?.sort === "top") renderPollResponses();
+        if (!chatMode && m.pollId === active) renderPollResponses();
       },
       onDel: ({ id }) => {
         msgs.delete(id);

@@ -54,8 +54,8 @@
           if (p.type === "text") {
             const list = [...msgs.values()].filter((m) => m.pollId === p.id);
             feed.hidden = false;
-            feed.replaceChildren(...sortMessages(list, p.sort).map((m) => buildLi(code, m)));
-            sub.textContent = `${list.length} messages · ${p.sort === "top" ? "Popular" : "Recent"}`;
+            feed.replaceChildren(...sortMessages(list, "top").map((m) => buildLi(code, m)));
+            sub.textContent = `${list.length} messages · Popular`;
           } else {
             const total = (p.counts || []).reduce((a, b) => a + b, 0);
             sub.textContent = `${total} votes`;
