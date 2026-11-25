@@ -30,7 +30,7 @@
     <form class="chat-composer" id="chatForm"><textarea id="chatText" rows="1" maxlength="500" placeholder="Say anything…" required></textarea><button id="chatSend">Send</button></form>
   </aside>
   <script type="module">
-    import { connect, send, buildLi, setCount, renderPoll, updatePoll, upgradeAuthorship } from "/app.js?v=21";
+    import { connect, send, buildLi, renderPoll, sortMessages, updatePoll, upgradeAuthorship } from "/app.js?v=21";
     const pathParts = location.pathname.split("/").filter(Boolean);
     const chatMode = pathParts.at(-1) === "chat";
     const code = chatMode ? pathParts.at(-2) : pathParts.at(-1);
@@ -88,9 +88,14 @@
     }
 
     function renderChat() {
-      const list = [...msgs.values()].filter((m) => (m.pollId || "qa") === "qa");
+      const list = sortMessages([...msgs.values()].filter((m) => (m.pollId || "qa") === "qa"), stage.sort);
       chatFeed.replaceChildren(...list.map((m) => buildLi(code, m)));
       if (chatOpen) { unreadChat = 0; chatToggle.classList.remove("has-unread"); }
+    }
+
+    function renderFeed() {
+      const list = sortMessages([...msgs.values()].filter((m) => m.pollId === active), stage.sort);
+      feed.replaceChildren(...list.map((m) => buildLi(code, m)));
     }
 
     function setChat(open) {
@@ -110,8 +115,7 @@
         composer.hidden = !textMode; // qa(Say Anything)는 아래 chat-panel의 자체 composer를 쓴다
         pollbox.hidden = false;
         pollbox.replaceChildren(renderPoll(code, p, true));
-        const list = [...msgs.values()].filter((m) => m.pollId === active);
-        feed.replaceChildren(...list.map((m) => buildLi(code, m)));
+        renderFeed();
       } else {
         pollbox.hidden = true;
         pollbox.replaceChildren();
@@ -136,14 +140,20 @@
         msgs.set(m.id, m);
         if (m.pollId === active) {
           const atBottom = window.innerHeight + window.scrollY >= document.body.scrollHeight - 60;
-          const li = buildLi(code, m); feed.append(li);
-          if (atBottom) li.scrollIntoView({ behavior: "smooth" });
+          renderFeed();
+          if (atBottom) feed.querySelector(`li[data-id="${m.id}"]`)?.scrollIntoView({ behavior: "smooth" });
         }
         const lastRead = Number(localStorage.getItem(chatReadKey) || 0);
         if ((m.pollId || "qa") === "qa" && !chatOpen && m.ts > lastRead) { unreadChat++; chatToggle.classList.add("has-unread"); }
         renderChat();
       },
-      onReact: ({ id, reactions }) => { setCount(feed, id, reactions); setCount(chatFeed, id, reactions); },
+      onReact: ({ id, reactions }) => {
+        const m = msgs.get(id);
+        if (!m) return;
+        m.reactions = reactions;
+        if (m.pollId === active) renderFeed();
+        if ((m.pollId || "qa") === "qa") renderChat();
+      },
       onDel: ({ id }) => { msgs.delete(id); feed.querySelector(`li[data-id="${id}"]`)?.remove(); chatFeed.querySelector(`li[data-id="${id}"]`)?.remove(); },
       onPin: ({ id, on }) => { feed.querySelector(`li[data-id="${id}"]`)?.classList.toggle("pinned", on); chatFeed.querySelector(`li[data-id="${id}"]`)?.classList.toggle("pinned", on); },
       onEdit: ({ id, text }) => {
