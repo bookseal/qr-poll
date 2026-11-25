@@ -58,10 +58,29 @@ curl -s https://qr-poll.physical-spark.com/api/9587463 | head
 - 발표자: https://qr-poll.physical-spark.com/present/9587463
 - 폰으로 QR 스캔 → `/r/9587463` → 익명 전송 → 발표자 화면 실시간 반영
 
-## 업데이트
+## 운영 업데이트
+
+PR과 `main`에서 GitHub 호스팅 러너의 **QR Poll tests**가 실행된다.
+배포할 커밋은 `main`의 **push** CI가 성공한 전체 SHA를 사용한다.
+행사가 진행 중이면 참여자의 SSE 연결을 끊는 재시작은 행사 이후에 한다.
+
 ```bash
-cd ~/qr-chat && git pull && npm ci --omit=dev && sudo systemctl restart qr-chat
+ssh prod
+cd /home/ubuntu/qr-chat
+git fetch origin main
+sha="$(git rev-parse FETCH_HEAD)"
+git show "$sha:deploy/deploy.sh" | bash -s -- "$sha" --check
+git show "$sha:deploy/deploy.sh" | bash -s -- "$sha"
 ```
+
+`--check`는 운영 체크아웃을 바꾸거나 서비스를 재시작하지 않고 SHA와 CI 결과를 확인한다.
+실제 배포에는 서버에서 `sudo systemctl restart qr-chat` 권한이 필요하다.
+스크립트는 새 의존성을 먼저 설치하고 검증된 SHA를 체크아웃한다. `events/`의 운영 전용
+파일이나 `data/`를 덮어쓰지 않으며, 로컬 수정과 충돌하면 중단한다.
+재시작 후 로컬 참여 페이지, 데모 이벤트 API 및 SSE 연결 확인에 실패하면 이전 코드와
+의존성을 복구한다. 배포된 체크아웃의 detached HEAD는 정상이다.
+
+배포 후 공개 도메인에서 참여 페이지와 발표자 화면을 확인한다.
 
 ## 참고: 왜 Vercel이 아니라 self-host인가
 실시간 채팅은 지속 연결(SSE/WebSocket)이 핵심인데 Vercel은 서버리스라 지속 연결이 약하고,
