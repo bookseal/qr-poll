@@ -10,7 +10,7 @@
 <body>
   <div class="present">
     <aside class="qr">
-      <img id="qr" alt="QR" style="width:100%" />
+      <a id="join" target="_blank" rel="noopener"><img id="qr" alt="QR" style="width:100%" /></a>
       <div class="big" id="code"></div>
       <div class="hint">Scan the QR code<br />to join anonymously</div>
     </aside>
@@ -32,6 +32,7 @@
     const sub = document.getElementById("sub");
     document.getElementById("code").textContent = code;
     document.getElementById("qr").src = `/qr/${encodeURIComponent(code)}.svg`;
+    document.getElementById("join").href = `/r/${encodeURIComponent(code)}`;
 
     const msgs = new Map();
     const polls = new Map();
